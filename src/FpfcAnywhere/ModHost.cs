@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using FpfcAnywhere.Core;
 using UnityEngine;
@@ -19,6 +20,8 @@ namespace FpfcAnywhere
         private UnityFreeCamera _camera = null!;
         private UnityMenuPointer _pointer = null!;
         private FreeCamSession _session = null!;
+        private NoticeOverlay _notices = null!;
+        private SettingsFile _settingsFile = null!;
         private Diagnostics? _diagnostics;
         private bool _scenesChanged = true;
         private bool _gameplayLoaded;
@@ -32,6 +35,9 @@ namespace FpfcAnywhere
             _camera = new UnityFreeCamera(_settings);
             _pointer = new UnityMenuPointer(_camera);
             _session = new FreeCamSession(_camera, _pointer, _settings);
+            _notices = GetComponent<NoticeOverlay>();
+            _settingsFile = new SettingsFile(Path.Combine(Path.GetDirectoryName(Application.dataPath), "UserData", SettingsFile.FileName));
+            LoadSettings();
 
             if (Environment.GetCommandLineArgs().Contains(Diagnostics.Argument))
             {
@@ -58,6 +64,7 @@ namespace FpfcAnywhere
             {
                 RefreshScenes();
                 _session.Tick(OperatorInput.Read(_gameplayLoaded));
+                _notices.Show(_session.TakeNotice());
                 _camera.FollowGameCamera();
                 ReportChanges();
                 _diagnostics?.OnLateUpdate();
@@ -90,8 +97,35 @@ namespace FpfcAnywhere
                 }
             }
 
+            var wasGameplay = _gameplayLoaded;
             _gameplayLoaded = GameplayScenes.IsGameplay(names);
             _diagnostics?.OnScenes(names);
+
+            if (_gameplayLoaded && !wasGameplay)
+            {
+                LoadSettings();
+            }
+        }
+
+        // Read at launch so a mistake shows up before a match, and again as each song loads so a
+        // change never needs a restart. The camera is built after this, so it gets the new values.
+        private void LoadSettings()
+        {
+            if (!_settingsFile.Refresh(_settings))
+            {
+                return;
+            }
+
+            ModLog.Info("Settings " + SettingsText.Describe(_settings));
+            foreach (var problem in _settingsFile.Problems)
+            {
+                ModLog.Info("Settings problem, " + problem);
+            }
+
+            if (_settingsFile.Problems.Count > 0)
+            {
+                _notices.Show(OperatorNotice.SettingsProblem);
+            }
         }
 
         private void ReportChanges()
@@ -108,7 +142,8 @@ namespace FpfcAnywhere
             if (phase == SessionPhase.WaitingForCamera && !_warnedSlowCamera && Time.unscaledTime - _waitingSince > SlowCameraWarningSeconds)
             {
                 _warnedSlowCamera = true;
-                ModLog.Info("Still no game camera to clone. Run with " + Diagnostics.Argument + " and check COMPATIBILITY.md");
+                _notices.Show(OperatorNotice.NoGameCamera);
+                ModLog.Info("Still no game camera to clone. Add " + Diagnostics.Argument + " to your launch arguments to log every camera in the scene");
             }
 
             if (_session.FreeCamEnabled != _lastEnabled)
@@ -123,6 +158,7 @@ namespace FpfcAnywhere
         {
             ModLog.Error("Free camera stopped, returning to the normal view", exception);
             enabled = false;
+            _notices.Show(OperatorNotice.FreeCamStopped);
 
             try
             {

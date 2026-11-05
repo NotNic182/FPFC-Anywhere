@@ -4,11 +4,12 @@ Installs or removes FPFC Anywhere in a copy of Beat Saber 1.45.3.
 
 .DESCRIPTION
 Unity builds list their assemblies and startup methods in two JSON files. This script adds one
-entry to each and copies the mod into Managed. No game binary is changed, and -Uninstall removes
-exactly what was added.
+entry to each and copies the mod into Managed. No game binary is changed, and -Uninstall takes the
+mod and both entries back out.
 
 .PARAMETER GameDir
-The game folder. Defaults to the BSManager instance named 1.45.3.
+The game folder, or Beat Saber.exe inside it. Defaults to the BSManager instance named 1.45.3,
+and asks where the game is if that folder is not usable.
 
 .PARAMETER DllPath
 The built mod. Defaults to FpfcAnywhere.dll beside this script.
@@ -22,7 +23,7 @@ break the install, so a BSManager copy is the supported route.
 #>
 [CmdletBinding()]
 param(
-    [string]$GameDir = (Join-Path $env:USERPROFILE 'BSManager\BSInstances\1.45.3'),
+    [string]$GameDir,
     [string]$DllPath,
     [switch]$Uninstall,
     [switch]$AllowStoreInstall
@@ -100,73 +101,194 @@ function Remove-InitEntry([string]$Text) {
     return $Text.Replace(',' + $InitEntry, '')
 }
 
-function Assert-Game {
-    if (-not (Test-Path -LiteralPath (Join-Path $GameDir 'Beat Saber.exe'))) {
-        throw "No Beat Saber.exe in '$GameDir'. Pass the game folder with -GameDir."
+# Install.cmd stays open after this, so a person reads the message rather than a stack trace.
+function Stop-Setup([string]$Message, [string]$Detail) {
+    Write-Host $Message -ForegroundColor Red
+    if ($Detail) {
+        Write-Host $Detail
     }
+
+    exit 1
 }
 
-function Assert-CanInstall {
-    $versionFile = Join-Path $GameDir 'BeatSaberVersion.txt'
-    $version = if (Test-Path -LiteralPath $versionFile) { (Read-Text $versionFile).Trim() } else { 'unknown' }
+# Takes what was typed, pasted or dragged in. Dragging adds quotes, and some paths come with a slash.
+function ConvertTo-GameFolder([string]$Text) {
+    $folder = $Text.Trim().Trim('"').Trim().TrimEnd('\')
+    if ($folder.EndsWith('\Beat Saber.exe', [StringComparison]::OrdinalIgnoreCase)) {
+        return $folder.Substring(0, $folder.Length - '\Beat Saber.exe'.Length)
+    }
+
+    return $folder
+}
+
+# The folder can be anything a person typed. Join-Path throws on a missing drive and Test-Path on
+# characters no path can have, while File.Exists just says no.
+function Get-GameProblem([string]$Folder) {
+    if (-not [IO.File]::Exists("$Folder\Beat Saber.exe")) {
+        return "There's no Beat Saber.exe in '$Folder'."
+    }
+
+    foreach ($name in @('ScriptingAssemblies.json', 'RuntimeInitializeOnLoads.json')) {
+        if (-not [IO.File]::Exists("$Folder\Beat Saber_Data\$name")) {
+            return "'$Folder' is missing $name, so it isn't a full copy of the game. Download it again in BSManager."
+        }
+    }
+
+    if ($Uninstall) {
+        return $null
+    }
+
+    $versionFile = "$Folder\BeatSaberVersion.txt"
+    if (-not [IO.File]::Exists($versionFile)) {
+        return "This needs Beat Saber 1.45.3, but '$Folder' doesn't say what version it is."
+    }
+
+    $version = (Read-Text $versionFile).Trim()
     if ($version -notmatch '^1\.45\.3(_|$)') {
-        throw "This build supports Beat Saber 1.45.3 only, but '$GameDir' is $version."
+        return "This needs Beat Saber 1.45.3, but '$Folder' is $version."
     }
 
-    if (-not $AllowStoreInstall -and $GameDir -match '(?i)steamapps|hyperbolic-magnetism-beat-saber') {
-        throw "'$GameDir' is managed by a store. Use a BSManager copy, or pass -AllowStoreInstall."
+    if (-not $AllowStoreInstall -and $Folder -match '(?i)steamapps|hyperbolic-magnetism-beat-saber') {
+        return "'$Folder' is your Steam or Meta install. Use a BSManager copy instead."
     }
 
-    if (-not (Test-Path -LiteralPath $DllPath)) {
-        throw "Cannot find the mod at '$DllPath'."
+    return $null
+}
+
+function Read-GameFolder {
+    while ($true) {
+        Write-Host 'Drag your 1.45.3 game folder (the one with Beat Saber.exe in it) into this window and press Enter.'
+        Write-Host 'To quit, just press Enter.'
+
+        # Read-Host fails outright without a console. This returns nothing, which counts as quitting.
+        $answer = [Console]::In.ReadLine()
+        if ([string]::IsNullOrWhiteSpace($answer)) {
+            return $null
+        }
+
+        $folder = ConvertTo-GameFolder $answer
+        $problem = Get-GameProblem $folder
+        if (-not $problem) {
+            return $folder
+        }
+
+        Write-Host $problem -ForegroundColor Red
     }
 }
 
-Assert-Game
+function Find-GameFolder {
+    if ($GameDir) {
+        $folder = ConvertTo-GameFolder $GameDir
+        $problem = Get-GameProblem $folder
+        if ($problem) {
+            Stop-Setup $problem
+        }
 
-$dataDir = Join-Path $GameDir 'Beat Saber_Data'
-$assembliesPath = Join-Path $dataDir 'ScriptingAssemblies.json'
-$initPath = Join-Path $dataDir 'RuntimeInitializeOnLoads.json'
-$installedDll = Join-Path $dataDir "Managed\$AssemblyFile"
+        return $folder
+    }
 
-$assemblies = Read-Text $assembliesPath
-$init = Read-Text $initPath
+    $folder = Join-Path $env:USERPROFILE 'BSManager\BSInstances\1.45.3'
+    $problem = Get-GameProblem $folder
+    if (-not $problem) {
+        return $folder
+    }
 
-if ($Uninstall) {
-    $newAssemblies = Remove-Assembly $assemblies
-    $newInit = Remove-InitEntry $init
+    Write-Host $problem
+    $folder = Read-GameFolder
+    # Choosing to quit is not an error, so this one stays out of the red.
+    if (-not $folder) {
+        Write-Host 'Nothing was changed.'
+        exit 1
+    }
+
+    return $folder
 }
-else {
-    Assert-CanInstall
-    $newAssemblies = Add-Assembly $assemblies
-    $newInit = Add-InitEntry $init
+
+# Only this copy matters, a different one running elsewhere has no hold on these files.
+function Test-GameRunning([string]$Folder) {
+    $exe = [IO.Path]::GetFullPath("$Folder\Beat Saber.exe")
+    foreach ($process in @(Get-Process -Name 'Beat Saber' -ErrorAction SilentlyContinue)) {
+        # Windows hides the path of a process run as admin, so an unknown one counts as this copy.
+        if (-not $process.Path -or $process.Path -ieq $exe) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
-# Both results are checked before either file is touched, so a failure cannot leave half an install.
-$null = $newAssemblies | ConvertFrom-Json
-$null = $newInit | ConvertFrom-Json
+try {
+    $GameDir = Find-GameFolder
 
-if ($Uninstall) {
+    if (Test-GameRunning $GameDir) {
+        Stop-Setup 'Close Beat Saber first, then run this again.'
+    }
+
+    if (-not $Uninstall -and -not (Test-Path -LiteralPath $DllPath)) {
+        Stop-Setup "$AssemblyFile isn't next to this script. Unzip the whole zip, then run this again."
+    }
+
+    $dataDir = Join-Path $GameDir 'Beat Saber_Data'
+    $assembliesPath = Join-Path $dataDir 'ScriptingAssemblies.json'
+    $initPath = Join-Path $dataDir 'RuntimeInitializeOnLoads.json'
+    $installedDll = Join-Path $dataDir "Managed\$AssemblyFile"
+
+    $assemblies = Read-Text $assembliesPath
+    $init = Read-Text $initPath
+
+    # Both results are checked before either file is touched, so a failure cannot leave half an install.
+    try {
+        if ($Uninstall) {
+            $newAssemblies = Remove-Assembly $assemblies
+            $newInit = Remove-InitEntry $init
+        }
+        else {
+            $newAssemblies = Add-Assembly $assemblies
+            $newInit = Add-InitEntry $init
+        }
+
+        $null = $newAssemblies | ConvertFrom-Json
+        $null = $newInit | ConvertFrom-Json
+    }
+    catch {
+        Stop-Setup "The game's file lists in '$GameDir' look damaged, so nothing was changed. Download that copy again in BSManager."
+    }
+
+    if ($Uninstall) {
+        $hasMod = Test-Path -LiteralPath $installedDll
+        if (-not $hasMod -and $newAssemblies -ceq $assemblies -and $newInit -ceq $init) {
+            Write-Host "FPFC Anywhere isn't installed in $GameDir"
+            return
+        }
+
+        # The lists go first: an unlisted DLL is ignored by the game, a listed missing one is not.
+        Write-Text $assembliesPath $newAssemblies
+        Write-Text $initPath $newInit
+        if ($hasMod) {
+            Remove-Item -LiteralPath $installedDll -Force
+        }
+
+        Write-Host "FPFC Anywhere removed from $GameDir"
+        return
+    }
+
+    foreach ($path in @($assembliesPath, $initPath)) {
+        $backup = "$path.fpfc-backup"
+        if (-not (Test-Path -LiteralPath $backup)) {
+            Copy-Item -LiteralPath $path -Destination $backup
+        }
+    }
+
+    Copy-Item -LiteralPath $DllPath -Destination $installedDll -Force
     Write-Text $assembliesPath $newAssemblies
     Write-Text $initPath $newInit
-    if (Test-Path -LiteralPath $installedDll) {
-        Remove-Item -LiteralPath $installedDll -Force
-    }
 
-    Write-Host "FPFC Anywhere removed from $GameDir"
-    return
+    Write-Host "FPFC Anywhere installed in $GameDir"
+    Write-Host 'Launch that copy from BSManager with FPFC on.'
 }
-
-foreach ($path in @($assembliesPath, $initPath)) {
-    $backup = "$path.fpfc-backup"
-    if (-not (Test-Path -LiteralPath $backup)) {
-        Copy-Item -LiteralPath $path -Destination $backup
-    }
+catch [System.IO.IOException], [System.UnauthorizedAccessException] {
+    Stop-Setup "Windows wouldn't let this change the game files. Close Beat Saber and anything else using that folder, then run this again." $_.Exception.Message
 }
-
-Copy-Item -LiteralPath $DllPath -Destination $installedDll -Force
-Write-Text $assembliesPath $newAssemblies
-Write-Text $initPath $newInit
-
-Write-Host "FPFC Anywhere installed in $GameDir"
-Write-Host 'Launch this version from BSManager with FPFC turned on.'
+catch {
+    Stop-Setup "Setup failed: $($_.Exception.Message)"
+}

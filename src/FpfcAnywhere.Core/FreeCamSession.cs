@@ -70,6 +70,8 @@ namespace FpfcAnywhere.Core
         private Vec3 _menuSpot;
         private float _menuSpotYaw;
         private bool _hasPose;
+        private FlightPose _shown;
+        private OperatorNotice _notice;
 
         public FreeCamSession(IFreeCamera camera, IMenuPointer pointer, FlightSettings settings)
         {
@@ -86,7 +88,19 @@ namespace FpfcAnywhere.Core
         /// <summary>The operator's G toggle. It deliberately survives from one song to the next.</summary>
         public bool FreeCamEnabled { get; private set; } = true;
 
+        /// <summary>Where the controls have the camera.</summary>
         public FlightPose Pose { get; private set; }
+
+        /// <summary>Where the camera really is. It trails <see cref="Pose"/> while smoothing is on.</summary>
+        public FlightPose ShownPose => _shown;
+
+        /// <summary>Hands over what the operator should be told, once.</summary>
+        public OperatorNotice TakeNotice()
+        {
+            var notice = _notice;
+            _notice = OperatorNotice.None;
+            return notice;
+        }
 
         public void Tick(in SessionFrame frame)
         {
@@ -129,12 +143,13 @@ namespace FpfcAnywhere.Core
             {
                 _startPose = FlightModel.StartFrom(sourcePosition, sourceYaw, _settings);
                 Pose = _startPose;
+                _shown = Pose;
                 _hasPose = true;
             }
 
             Phase = SessionPhase.Active;
             _camera.SetVisible(FreeCamEnabled);
-            _camera.Apply(Pose);
+            _camera.Apply(_shown);
         }
 
         private void Fly(in SessionFrame frame)
@@ -142,7 +157,7 @@ namespace FpfcAnywhere.Core
             if (_camera.RefreshSource())
             {
                 _camera.SetVisible(FreeCamEnabled);
-                _camera.Apply(Pose);
+                _camera.Apply(_shown);
             }
 
             if (frame.WindowFocused && frame.TogglePressed)
@@ -157,6 +172,11 @@ namespace FpfcAnywhere.Core
 
             if (!FreeCamEnabled)
             {
+                if (frame.WindowFocused && frame.MenuPressed)
+                {
+                    _notice = OperatorNotice.FreeCamIsOff;
+                }
+
                 return;
             }
 
@@ -178,6 +198,7 @@ namespace FpfcAnywhere.Core
             if (frame.WindowFocused && frame.ResetPressed)
             {
                 Pose = _startPose;
+                _shown = Pose;
             }
             else
             {
@@ -185,7 +206,10 @@ namespace FpfcAnywhere.Core
                 Pose = FlightModel.Step(Pose, input, frame.DeltaSeconds, _settings);
             }
 
-            _camera.Apply(Pose);
+            // The pointer is the middle of the view, so with the menu open the camera has to be
+            // exactly where the pointer is or the buttons would miss.
+            _shown = MenuOpen ? Pose : FlightModel.Smooth(_shown, Pose, frame.DeltaSeconds, _settings.SmoothingSeconds);
+            _camera.Apply(_shown);
 
             if (MenuOpen)
             {
@@ -201,14 +225,17 @@ namespace FpfcAnywhere.Core
                 return;
             }
 
-            if (_pointer.TryAttach(out var cameraPosition, out var cameraLocalHeight, out var yaw))
+            if (!_pointer.TryAttach(out var cameraPosition, out var cameraLocalHeight, out var yaw))
             {
-                _poseBeforeMenu = Pose;
-                _menuSpot = cameraPosition;
-                _menuSpotYaw = yaw;
-                Pose = FlightModel.MenuView(cameraPosition, cameraLocalHeight, yaw, _settings);
-                MenuOpen = true;
+                _notice = OperatorNotice.NoMenuHere;
+                return;
             }
+
+            _poseBeforeMenu = Pose;
+            _menuSpot = cameraPosition;
+            _menuSpotYaw = yaw;
+            Pose = FlightModel.MenuView(cameraPosition, cameraLocalHeight, yaw, _settings);
+            MenuOpen = true;
         }
 
         // The spot picker moves the player, and the menu with it, so the camera has to go along.
@@ -231,6 +258,7 @@ namespace FpfcAnywhere.Core
             {
                 _pointer.Release();
                 Pose = _poseBeforeMenu;
+                _shown = Pose;
                 MenuOpen = false;
             }
         }

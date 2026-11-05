@@ -57,6 +57,26 @@ namespace FpfcAnywhere.Core
             return new FlightPose(pose.Position + (direction * (speed * seconds)), yaw, pitch);
         }
 
+        /// <summary>
+        /// Moves what the camera shows toward where the controls have it. The step comes from the
+        /// real frame time, so viewers get the same glide at any frame rate. Following a moving
+        /// target this way gives flying a soft start and a soft stop without any extra state.
+        /// </summary>
+        public static FlightPose Smooth(FlightPose shown, FlightPose target, float deltaSeconds, float smoothingSeconds)
+        {
+            if (smoothingSeconds <= 0f)
+            {
+                return target;
+            }
+
+            var step = 1f - (float)Math.Exp(-Math.Max(deltaSeconds, 0f) / smoothingSeconds);
+
+            return new FlightPose(
+                shown.Position + ((target.Position - shown.Position) * step),
+                shown.Yaw + ((target.Yaw - shown.Yaw) * step),
+                shown.Pitch + ((target.Pitch - shown.Pitch) * step));
+        }
+
         // Forward and strafe stay on the horizontal plane so looking down never drives into the floor.
         private static Vec3 FlatDirection(float yaw, in FlightInput input)
         {
