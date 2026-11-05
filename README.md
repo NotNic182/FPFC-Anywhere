@@ -28,6 +28,8 @@ Hit Esc while spectating and it takes you to the menu. Aim with the mouse, left 
 
 The first launch makes `UserData/FpfcAnywhere.ini` in your game folder. Open it in Notepad to change the look speed, fly speed, Shift speed, field of view and camera smoothing. Changes kick in at the next song.
 
+Camera smoothing is off by default. Set `smoothing = 0.5` for a floaty cinematic look. The file says to try 0.1 but you'll barely notice that.
+
 ## If something's wrong
 
 A little message pops up in the bottom left if a key can't do anything right now or the free cam has a problem. It shows on stream if you're capturing the game window. There's more detail in `Logs/FpfcAnywhere.log` in your game folder.
