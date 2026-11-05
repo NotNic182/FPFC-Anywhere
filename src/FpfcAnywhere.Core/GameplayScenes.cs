@@ -9,7 +9,9 @@ namespace FpfcAnywhere.Core
     {
         private const string CoreScene = "GameCore";
 
-        private static readonly string[] LevelScenes = { "StandardGameplay", "MultiplayerGameplay", "Tutorial" };
+        private const string MultiplayerScene = "MultiplayerGameplay";
+
+        private static readonly string[] LevelScenes = { "StandardGameplay", MultiplayerScene, "Tutorial" };
 
         private static readonly string[] MenuScenes = { "MainMenu", "GameInit" };
 
@@ -23,6 +25,9 @@ namespace FpfcAnywhere.Core
             return scenes.Contains(CoreScene, StringComparer.Ordinal)
                 && scenes.Any(scene => LevelScenes.Contains(scene, StringComparer.Ordinal));
         }
+
+        /// <summary>True while a multiplayer song is loaded. The live score list only exists in that scene.</summary>
+        public static bool IsMultiplayer(IEnumerable<string> loadedScenes) => loadedScenes.Contains(MultiplayerScene, StringComparer.Ordinal);
 
         public static bool IsMenuScene(string sceneName) => MenuScenes.Contains(sceneName, StringComparer.Ordinal);
     }

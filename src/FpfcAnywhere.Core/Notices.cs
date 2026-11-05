@@ -16,6 +16,7 @@ namespace FpfcAnywhere.Core
         NeedsFpfc,
         WrongGameVersion,
         SettingsProblem,
+        ScoreboardStopped,
     }
 
     public static class NoticeText
@@ -38,6 +39,8 @@ namespace FpfcAnywhere.Core
                     return "FPFC Anywhere is off. It only runs on Beat Saber " + ModeGate.SupportedVersion + ".";
                 case OperatorNotice.SettingsProblem:
                     return "A setting in " + SettingsFile.FileName + " wasn't used. The log says which.";
+                case OperatorNotice.ScoreboardStopped:
+                    return "The scoreboard stopped working. It'll try again next song.";
                 default:
                     return string.Empty;
             }
