@@ -27,7 +27,7 @@ namespace FpfcAnywhere.Core
             "# Changes kick in at the next song. Delete this file to get the defaults back.",
             string.Empty,
             "# How fast the mouse turns the camera. Lower is slower. 0.01 to 1.",
-            "look_speed = 0.1",
+            "look_speed = 0.03",
             string.Empty,
             "# How fast you fly, in meters per second. 0.1 to 30.",
             "move_speed = 3",
@@ -39,8 +39,8 @@ namespace FpfcAnywhere.Core
             "fov = 90",
             string.Empty,
             "# Makes the camera glide instead of starting and stopping dead. Roughly how many seconds",
-            "# it takes to catch up with you. 0 is off. Try 0.1 to start. 0 to 1.",
-            "smoothing = 0",
+            "# it takes to catch up with you. Higher is floatier. 0 is off. 0 to 1.",
+            "smoothing = 0.5",
             string.Empty,
         });
 

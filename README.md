@@ -28,7 +28,7 @@ Hit Esc while spectating and it takes you to the menu. Aim with the mouse, left 
 
 The first launch makes `UserData/FpfcAnywhere.ini` in your game folder. Open it in Notepad to change the look speed, fly speed, Shift speed, field of view and camera smoothing. Changes kick in at the next song.
 
-Camera smoothing is off by default. Set `smoothing = 0.5` for a floaty cinematic look. The file says to try 0.1 but you'll barely notice that.
+The camera comes set up slow and floaty for a cinematic look. If that's not your thing, turn up `look_speed` or turn down `smoothing` in `UserData/FpfcAnywhere.ini`. `smoothing = 0` turns the glide off.
 
 ## If something's wrong
 

@@ -37,13 +37,13 @@ namespace FpfcAnywhere.Core
         public float StartHeight { get; set; } = 1.7f;
         public float MoveSpeed { get; set; } = 3f;
         public float FastMultiplier { get; set; } = 3f;
-        public float LookSensitivity { get; set; } = 0.1f;
+        public float LookSensitivity { get; set; } = 0.03f;
         public float MaxPitch { get; set; } = 89f;
         public float MaxStepSeconds { get; set; } = 0.1f;
         public float FieldOfView { get; set; } = 90f;
 
         /// <summary>Roughly how long the camera takes to catch up with the controls. Zero is off.</summary>
-        public float SmoothingSeconds { get; set; }
+        public float SmoothingSeconds { get; set; } = 0.5f;
 
         /// <summary>How far the player must jump in one frame to count as a spot change, not a head movement.</summary>
         public float SpotJumpMeters { get; set; } = 0.5f;
