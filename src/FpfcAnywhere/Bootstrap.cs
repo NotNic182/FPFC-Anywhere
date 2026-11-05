@@ -28,6 +28,7 @@ namespace FpfcAnywhere
                 // A launch the mod sits out gets only the notice saying why, and no camera code.
                 if (decision == GateDecision.Run)
                 {
+                    host.AddComponent<ScoreboardOverlay>();
                     host.AddComponent<ModHost>();
                 }
                 else

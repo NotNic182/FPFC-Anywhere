@@ -24,11 +24,15 @@ Grab the zip from releases, unzip it and run `Install.cmd` with the game closed.
 
 Hit Esc while spectating and it takes you to the menu. Aim with the mouse, left click to press stuff, Esc again puts you back where you were. Doesn't work while you're playing a song.
 
+## Scoreboard
+
+In multiplayer there's a live scoreboard in the top left with everyone's name and score, plus how far behind first place they are. An F means they failed. Other players never see it, but it'll be on stream if you're capturing the game window.
+
 ## Settings
 
-The first launch makes `UserData/FpfcAnywhere.ini` in your game folder. Open it in Notepad to change the look speed, fly speed, Shift speed, field of view and camera smoothing. Changes kick in at the next song.
+The first launch makes `UserData/FpfcAnywhere.ini` in your game folder. Open it in Notepad to change the look speed, fly speed, Shift speed, field of view, camera smoothing and the scoreboard. Changes kick in at the next song.
 
-The camera comes set up slow and floaty for a cinematic look. If that's not your thing, turn up `look_speed` or turn down `smoothing` in `UserData/FpfcAnywhere.ini`. `smoothing = 0` turns the glide off.
+The camera comes set up slow and floaty for a cinematic look. If that's not your thing, turn up `look_speed` or turn down `smoothing` in `UserData/FpfcAnywhere.ini`. `smoothing = 0` turns the glide off. `scoreboard = 0` turns the scoreboard off.
 
 ## If something's wrong
 

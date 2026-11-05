@@ -31,7 +31,7 @@ namespace FpfcAnywhere.Core
         public float MouseY;
     }
 
-    /// <summary>Tunable flight values. The start height matches the game's stock FPFC.</summary>
+    /// <summary>Everything the settings file controls. The start height matches the game's stock FPFC.</summary>
     public sealed class FlightSettings
     {
         public float StartHeight { get; set; } = 1.7f;
@@ -44,6 +44,9 @@ namespace FpfcAnywhere.Core
 
         /// <summary>Roughly how long the camera takes to catch up with the controls. Zero is off.</summary>
         public float SmoothingSeconds { get; set; } = 0.5f;
+
+        /// <summary>Whether the live scores get pinned to the window during multiplayer.</summary>
+        public bool ShowScoreboard { get; set; } = true;
 
         /// <summary>How far the player must jump in one frame to count as a spot change, not a head movement.</summary>
         public float SpotJumpMeters { get; set; } = 0.5f;

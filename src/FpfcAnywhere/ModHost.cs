@@ -21,6 +21,7 @@ namespace FpfcAnywhere
         private UnityMenuPointer _pointer = null!;
         private FreeCamSession _session = null!;
         private NoticeOverlay _notices = null!;
+        private ScoreboardOverlay _scoreboard = null!;
         private SettingsFile _settingsFile = null!;
         private Diagnostics? _diagnostics;
         private bool _scenesChanged = true;
@@ -36,6 +37,7 @@ namespace FpfcAnywhere
             _pointer = new UnityMenuPointer(_camera);
             _session = new FreeCamSession(_camera, _pointer, _settings);
             _notices = GetComponent<NoticeOverlay>();
+            _scoreboard = GetComponent<ScoreboardOverlay>();
             _settingsFile = new SettingsFile(Path.Combine(Path.GetDirectoryName(Application.dataPath), "UserData", SettingsFile.FileName));
             LoadSettings();
 
@@ -105,6 +107,8 @@ namespace FpfcAnywhere
             {
                 LoadSettings();
             }
+
+            _scoreboard.enabled = _settings.ShowScoreboard && GameplayScenes.IsMultiplayer(names);
         }
 
         // Read at launch so a mistake shows up before a match, and again as each song loads so a

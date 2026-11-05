@@ -18,6 +18,7 @@ namespace FpfcAnywhere.Core
             new Setting("shift_multiplier", 1f, 10f, settings => settings.FastMultiplier, (settings, value) => settings.FastMultiplier = value),
             new Setting("fov", 20f, 120f, settings => settings.FieldOfView, (settings, value) => settings.FieldOfView = value),
             new Setting("smoothing", 0f, 1f, settings => settings.SmoothingSeconds, (settings, value) => settings.SmoothingSeconds = value),
+            new Setting("scoreboard", 0f, 1f, settings => settings.ShowScoreboard ? 1f : 0f, (settings, value) => settings.ShowScoreboard = value > 0f),
         };
 
         /// <summary>The file a person finds on first launch. CRLF, so old Notepad shows it properly.</summary>
@@ -41,6 +42,9 @@ namespace FpfcAnywhere.Core
             "# Makes the camera glide instead of starting and stopping dead. Roughly how many seconds",
             "# it takes to catch up with you. Higher is floatier. 0 is off. 0 to 1.",
             "smoothing = 0.5",
+            string.Empty,
+            "# Pins the live scores to the top left during multiplayer. 1 is on, 0 is off.",
+            "scoreboard = 1",
             string.Empty,
         });
 
