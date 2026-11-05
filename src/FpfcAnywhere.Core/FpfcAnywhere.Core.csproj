@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <RootNamespace>FpfcAnywhere.Core</RootNamespace>
+    <AssemblyName>FpfcAnywhere.Core</AssemblyName>
+  </PropertyGroup>
+</Project>
