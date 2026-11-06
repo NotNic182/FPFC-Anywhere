@@ -3,6 +3,8 @@
 Free cam for Beat Saber 1.45.3 on PC. Normally FPFC drops you in the floor and stops working when a song starts. This keeps it working the whole song, including when you're spectating in multiplayer.
 
 It only changes your desktop view, so nobody else in the lobby needs it. The game's own view isn't drawn while the free cam is on, so fps is about the same as vanilla, and there are settings to push it a lot higher.
+
+
 <img width="300" height="169" alt="IMG_7755" src="https://github.com/user-attachments/assets/a2642e2a-c6fb-449d-bf62-71f57d05e430" />
 
 ## Install
