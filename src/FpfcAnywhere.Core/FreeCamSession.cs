@@ -88,6 +88,9 @@ namespace FpfcAnywhere.Core
         /// <summary>The operator's G toggle. It deliberately survives from one song to the next.</summary>
         public bool FreeCamEnabled { get; private set; } = true;
 
+        /// <summary>True while the free camera is what the window shows: a song is running and G has not hidden it.</summary>
+        public bool FreeCamShowing => Phase == SessionPhase.Active && FreeCamEnabled;
+
         /// <summary>Where the controls have the camera.</summary>
         public FlightPose Pose { get; private set; }
 

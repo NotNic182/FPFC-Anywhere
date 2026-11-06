@@ -23,6 +23,7 @@ namespace FpfcAnywhere
         private NoticeOverlay _notices = null!;
         private ScoreboardOverlay _scoreboard = null!;
         private SettingsFile _settingsFile = null!;
+        private QualityOverride _quality = null!;
         private Diagnostics? _diagnostics;
         private bool _scenesChanged = true;
         private bool _gameplayLoaded;
@@ -30,6 +31,8 @@ namespace FpfcAnywhere
         private bool _lastEnabled = true;
         private float _waitingSince;
         private bool _warnedSlowCamera;
+        private bool _lastQualityApplied;
+        private bool _lastDrawSkipped;
 
         private void Awake()
         {
@@ -39,6 +42,7 @@ namespace FpfcAnywhere
             _notices = GetComponent<NoticeOverlay>();
             _scoreboard = GetComponent<ScoreboardOverlay>();
             _settingsFile = new SettingsFile(Path.Combine(Path.GetDirectoryName(Application.dataPath), "UserData", SettingsFile.FileName));
+            _quality = new QualityOverride(new UnityQualityKnobs(gameObject.AddComponent<FrameLimiter>()), _settings);
             LoadSettings();
 
             if (Environment.GetCommandLineArgs().Contains(Diagnostics.Argument))
@@ -68,6 +72,8 @@ namespace FpfcAnywhere
                 _session.Tick(OperatorInput.Read(_gameplayLoaded));
                 _notices.Show(_session.TakeNotice());
                 _camera.FollowGameCamera();
+                _quality.Update(_session.FreeCamShowing);
+                _camera.UpdateGameDraw(_session.FreeCamShowing);
                 ReportChanges();
                 _diagnostics?.OnLateUpdate();
             }
@@ -155,6 +161,18 @@ namespace FpfcAnywhere
                 _lastEnabled = _session.FreeCamEnabled;
                 ModLog.Info("Free camera " + (_lastEnabled ? "on" : "off"));
             }
+
+            if (_quality.Applied != _lastQualityApplied)
+            {
+                _lastQualityApplied = _quality.Applied;
+                ModLog.Info(_lastQualityApplied ? "Quality " + _quality.Describe() : "Quality back to the game's own");
+            }
+
+            if (_camera.GameDrawSkipped != _lastDrawSkipped)
+            {
+                _lastDrawSkipped = _camera.GameDrawSkipped;
+                ModLog.Info(_lastDrawSkipped ? "Game camera draw skipped" : "Game camera draw back");
+            }
         }
 
         // Any failure hands the normal view straight back. A broken camera must not cost a match.
@@ -167,6 +185,7 @@ namespace FpfcAnywhere
             try
             {
                 _session.Shutdown();
+                _quality.Restore();
             }
             catch (Exception shutdownException)
             {

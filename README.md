@@ -2,7 +2,7 @@
 
 Free cam for Beat Saber 1.45.3 on PC. Normally FPFC drops you in the floor and stops working when a song starts. This keeps it working the whole song, including when you're spectating in multiplayer.
 
-It only changes your desktop view, so nobody else in the lobby needs it. Your fps will drop a bit since the scene gets drawn twice.
+It only changes your desktop view, so nobody else in the lobby needs it. The game's own view isn't drawn while the free cam is on, so fps is about the same as vanilla, and there are settings to push it a lot higher.
 
 ## Install
 
@@ -30,9 +30,11 @@ In multiplayer there's a live scoreboard in the top left with everyone's name an
 
 ## Settings
 
-The first launch makes `UserData/FpfcAnywhere.ini` in your game folder. Open it in Notepad to change the look speed, fly speed, Shift speed, field of view, camera smoothing and the scoreboard. Changes kick in at the next song.
+The first launch makes `UserData/FpfcAnywhere.ini` in your game folder. Open it in Notepad to change the look speed, fly speed, Shift speed, field of view, camera smoothing, the scoreboard, the render scale, anti-aliasing and fps cap the free cam runs at, and whether the game's own view still gets drawn. Changes kick in at the next song.
 
 The camera comes set up slow and floaty for a cinematic look. If that's not your thing, turn up `look_speed` or turn down `smoothing` in `UserData/FpfcAnywhere.ini`. `smoothing = 0` turns the glide off. `scoreboard = 0` turns the scoreboard off.
+
+The game draws your desktop at your VR resolution scale, which is a lot of pixels nobody sees on a stream. `render_scale = 1` draws it at the window's own size instead and took my PC from about 380 fps to 1200, and `anti_aliasing = 4` on top of that gets 1450. `fps_cap = 60` holds it at 60 if the stream only needs 60 anyway, which keeps the GPU cool and quiet. All three only kick in while the free cam is on.
 
 ## If something's wrong
 
