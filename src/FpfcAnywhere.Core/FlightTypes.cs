@@ -50,5 +50,17 @@ namespace FpfcAnywhere.Core
 
         /// <summary>How far the player must jump in one frame to count as a spot change, not a head movement.</summary>
         public float SpotJumpMeters { get; set; } = 0.5f;
+
+        /// <summary>Render scale for the window while the free camera shows. 0 keeps the game's own value.</summary>
+        public float RenderScale { get; set; }
+
+        /// <summary>Anti-aliasing samples while the free camera shows: 1, 2, 4 or 8. 0 keeps the game's own value.</summary>
+        public int AntiAliasing { get; set; }
+
+        /// <summary>Frames per second ceiling while the free camera shows. 0 is no cap.</summary>
+        public int FpsCap { get; set; }
+
+        /// <summary>Whether the game camera's own draw, which nobody sees, is skipped while the free camera shows.</summary>
+        public bool SkipGameDraw { get; set; } = true;
     }
 }

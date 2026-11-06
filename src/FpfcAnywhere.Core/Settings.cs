@@ -13,12 +13,16 @@ namespace FpfcAnywhere.Core
     {
         private static readonly Setting[] Settings =
         {
-            new Setting("look_speed", 0.01f, 1f, settings => settings.LookSensitivity, (settings, value) => settings.LookSensitivity = value),
-            new Setting("move_speed", 0.1f, 30f, settings => settings.MoveSpeed, (settings, value) => settings.MoveSpeed = value),
-            new Setting("shift_multiplier", 1f, 10f, settings => settings.FastMultiplier, (settings, value) => settings.FastMultiplier = value),
-            new Setting("fov", 20f, 120f, settings => settings.FieldOfView, (settings, value) => settings.FieldOfView = value),
-            new Setting("smoothing", 0f, 1f, settings => settings.SmoothingSeconds, (settings, value) => settings.SmoothingSeconds = value),
-            new Setting("scoreboard", 0f, 1f, settings => settings.ShowScoreboard ? 1f : 0f, (settings, value) => settings.ShowScoreboard = value > 0f),
+            Setting.Between("look_speed", 0.01f, 1f, settings => settings.LookSensitivity, (settings, value) => settings.LookSensitivity = value),
+            Setting.Between("move_speed", 0.1f, 30f, settings => settings.MoveSpeed, (settings, value) => settings.MoveSpeed = value),
+            Setting.Between("shift_multiplier", 1f, 10f, settings => settings.FastMultiplier, (settings, value) => settings.FastMultiplier = value),
+            Setting.Between("fov", 20f, 120f, settings => settings.FieldOfView, (settings, value) => settings.FieldOfView = value),
+            Setting.Between("smoothing", 0f, 1f, settings => settings.SmoothingSeconds, (settings, value) => settings.SmoothingSeconds = value),
+            Setting.Between("scoreboard", 0f, 1f, settings => settings.ShowScoreboard ? 1f : 0f, (settings, value) => settings.ShowScoreboard = value > 0f),
+            Setting.OffOrBetween("render_scale", 0.5f, 2f, settings => settings.RenderScale, (settings, value) => settings.RenderScale = value),
+            Setting.OneOf("anti_aliasing", new[] { 0f, 1f, 2f, 4f, 8f }, settings => settings.AntiAliasing, (settings, value) => settings.AntiAliasing = (int)value),
+            Setting.OffOrBetween("fps_cap", 20f, 1000f, settings => settings.FpsCap, (settings, value) => settings.FpsCap = (int)Math.Round(value)),
+            Setting.Between("skip_game_draw", 0f, 1f, settings => settings.SkipGameDraw ? 1f : 0f, (settings, value) => settings.SkipGameDraw = value > 0f),
         };
 
         /// <summary>The file a person finds on first launch. CRLF, so old Notepad shows it properly.</summary>
@@ -45,6 +49,23 @@ namespace FpfcAnywhere.Core
             string.Empty,
             "# Pins the live scores to the top left during multiplayer. 1 is on, 0 is off.",
             "scoreboard = 1",
+            string.Empty,
+            "# Draws the game at this fraction of the window size while the free cam is on. 1 is the",
+            "# window's own size, and a big fps win if your VR resolution scale is higher. 0 keeps the",
+            "# game's setting. 0, or 0.5 to 2.",
+            "render_scale = 0",
+            string.Empty,
+            "# Anti-aliasing while the free cam is on. 1 is off, 2, 4 and 8 are smoother and slower.",
+            "# 0 keeps the game's setting.",
+            "anti_aliasing = 0",
+            string.Empty,
+            "# Caps the fps while the free cam is on. Keeps the GPU cooler when the stream only needs",
+            "# 60 anyway. 0 is no cap. 0, or 20 to 1000.",
+            "fps_cap = 0",
+            string.Empty,
+            "# Skips drawing the game's own view while the free cam is on, since nobody sees it. 1 is on,",
+            "# 0 draws it anyway like older versions did.",
+            "skip_game_draw = 1",
             string.Empty,
         });
 
@@ -112,12 +133,12 @@ namespace FpfcAnywhere.Core
                 return $"\"{value}\" isn't a number, so {setting.Name} is using {Format(setting.Read(defaults))}";
             }
 
-            var limited = Math.Min(Math.Max(number, setting.Min), setting.Max);
+            var limited = setting.Fix(number);
             setting.Write(settings, limited);
 
             return limited == number
                 ? null
-                : $"{setting.Name} has to be between {Format(setting.Min)} and {Format(setting.Max)}, so it's using {Format(limited)}";
+                : $"{setting.Name} has to be {setting.Allowed}, so it's using {Format(limited)}";
         }
 
         private static string WithoutNote(string line)
@@ -139,24 +160,59 @@ namespace FpfcAnywhere.Core
 
         private sealed class Setting
         {
-            public Setting(string name, float min, float max, Func<FlightSettings, float> read, Action<FlightSettings, float> write)
+            private Setting(string name, string allowed, Func<float, float> fix, Func<FlightSettings, float> read, Action<FlightSettings, float> write)
             {
                 Name = name;
-                Min = min;
-                Max = max;
+                Allowed = allowed;
+                Fix = fix;
                 Read = read;
                 Write = write;
             }
 
             public string Name { get; }
 
-            public float Min { get; }
+            /// <summary>The allowed values in words, for the problem line.</summary>
+            public string Allowed { get; }
 
-            public float Max { get; }
+            /// <summary>Turns any number into the value that gets used.</summary>
+            public Func<float, float> Fix { get; }
 
             public Func<FlightSettings, float> Read { get; }
 
             public Action<FlightSettings, float> Write { get; }
+
+            public static Setting Between(string name, float min, float max, Func<FlightSettings, float> read, Action<FlightSettings, float> write)
+            {
+                return new Setting(name, $"between {Format(min)} and {Format(max)}", value => Math.Min(Math.Max(value, min), max), read, write);
+            }
+
+            /// <summary>Zero or anything at or below it switches the setting off, otherwise the range applies.</summary>
+            public static Setting OffOrBetween(string name, float min, float max, Func<FlightSettings, float> read, Action<FlightSettings, float> write)
+            {
+                return new Setting(name, $"0 or between {Format(min)} and {Format(max)}", value => value <= 0f ? 0f : Math.Min(Math.Max(value, min), max), read, write);
+            }
+
+            /// <summary>Only the listed values, in rising order. Anything else uses the nearest one, the higher on a tie.</summary>
+            public static Setting OneOf(string name, float[] values, Func<FlightSettings, float> read, Action<FlightSettings, float> write)
+            {
+                var words = string.Join(", ", Array.ConvertAll(values, Format));
+                var last = words.LastIndexOf(", ", StringComparison.Ordinal);
+                var allowed = words.Substring(0, last) + " or " + words.Substring(last + 2);
+
+                return new Setting(name, allowed, value =>
+                {
+                    var nearest = values[0];
+                    foreach (var candidate in values)
+                    {
+                        if (Math.Abs(candidate - value) <= Math.Abs(nearest - value))
+                        {
+                            nearest = candidate;
+                        }
+                    }
+
+                    return nearest;
+                }, read, write);
+            }
         }
     }
 

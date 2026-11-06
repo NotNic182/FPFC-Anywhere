@@ -11,9 +11,12 @@ namespace FpfcAnywhere
     ///
     /// This is the core of the safety design. In 1.45.3 PlayerTransforms reads the game's
     /// MainCamera as the player's head, and MultiplayerLocal(In)activeClient sends that value to
-    /// other players. So the game's camera is only ever read here, never written. Flying this
-    /// clone instead changes what the desktop shows and nothing else, and because nothing else
-    /// knows the clone exists, nothing can move it back into the floor.
+    /// other players. So the game's camera is never moved here. The one thing written on it is
+    /// the draw type on its URP data, Overlay while the free camera shows so the scene is not
+    /// drawn twice, and Base again the moment it is not; position, rotation, enabled and tracking
+    /// stay the game's. Flying this clone instead changes what the desktop shows and nothing
+    /// else, and because nothing else knows the clone exists, nothing can move it back into the
+    /// floor.
     /// </summary>
     internal sealed class UnityFreeCamera : IFreeCamera
     {
@@ -23,7 +26,11 @@ namespace FpfcAnywhere
         // How often to look for a better camera while the current one still works.
         private const float SourceCheckSeconds = 0.25f;
 
+        // The object EnvironmentShaderWarmup hangs under the game camera for the one frame it draws.
+        private const string WarmupName = "ShaderWarmup";
+
         private readonly FlightSettings _settings;
+        private readonly HiddenDraw _hiddenDraw;
         private readonly List<XRDisplaySubsystem> _displays = new List<XRDisplaySubsystem>();
         private readonly List<CameraCandidate> _candidates = new List<CameraCandidate>();
         private GameObject? _holder;
@@ -32,10 +39,13 @@ namespace FpfcAnywhere
         private XRDisplaySubsystem? _mirroredDisplay;
         private int _originalMirrorMode;
         private float _nextSourceCheck;
+        private float _builtAt;
+        private bool _sourceSkipped;
 
         public UnityFreeCamera(FlightSettings settings)
         {
             _settings = settings;
+            _hiddenDraw = new HiddenDraw(settings);
         }
 
         public bool IsAlive => _camera != null;
@@ -43,6 +53,9 @@ namespace FpfcAnywhere
         public Transform? Transform => _camera != null ? _camera.transform : null;
 
         public Camera? GameCamera => _source;
+
+        /// <summary>True while the game camera's own draw is switched off.</summary>
+        public bool GameDrawSkipped => _sourceSkipped;
 
         public bool TryCreate(out Vec3 sourcePosition, out float sourceYaw)
         {
@@ -85,6 +98,7 @@ namespace FpfcAnywhere
             }
 
             var previous = _holder;
+            SetSourceSkipped(false);
             Build(picked);
             Object.Destroy(previous);
             return true;
@@ -119,6 +133,7 @@ namespace FpfcAnywhere
         /// </summary>
         public void Destroy()
         {
+            SetSourceSkipped(false);
             SetDesktopMirrorOff(false);
 
             if (_holder != null)
@@ -138,6 +153,19 @@ namespace FpfcAnywhere
             {
                 _camera.cullingMask = _source.cullingMask;
             }
+        }
+
+        /// <summary>
+        /// Skips the game camera's own draw while the rules allow it and hands it back otherwise.
+        /// Called once a frame. See the class comment for why this is the only write to that camera.
+        /// </summary>
+        public void UpdateGameDraw(bool freeCamShowing)
+        {
+            var skip = _camera != null
+                && _source != null
+                && _hiddenDraw.CanSkip(freeCamShowing, Time.unscaledTime - _builtAt, _source.transform.Find(WarmupName) != null, XRSettings.isDeviceActive);
+
+            SetSourceSkipped(skip);
         }
 
         private Camera? FindGameCamera(Camera? current)
@@ -192,6 +220,7 @@ namespace FpfcAnywhere
 
             _camera = camera;
             _source = source;
+            _builtAt = Time.unscaledTime;
             _holder.SetActive(true);
 
             ModLog.Info($"Cloned '{source.name}' (tag {source.tag}, mask 0x{source.cullingMask:X8}) from scene '{source.gameObject.scene.name}'");
@@ -210,6 +239,42 @@ namespace FpfcAnywhere
                 {
                     Object.DestroyImmediate(component);
                 }
+            }
+        }
+
+        // Takes over a camera that draws as Base only, and gives it back only while it is still
+        // Overlay, so a draw type the game set itself is left alone either way. A source that has
+        // already gone with its scene has nothing to put back.
+        private void SetSourceSkipped(bool skip)
+        {
+            if (skip == _sourceSkipped)
+            {
+                return;
+            }
+
+            if (_source == null)
+            {
+                _sourceSkipped = false;
+                return;
+            }
+
+            var data = _source.GetUniversalAdditionalCameraData();
+            if (skip)
+            {
+                if (data.renderType == CameraRenderType.Base)
+                {
+                    data.renderType = CameraRenderType.Overlay;
+                    _sourceSkipped = true;
+                }
+            }
+            else
+            {
+                if (data.renderType == CameraRenderType.Overlay)
+                {
+                    data.renderType = CameraRenderType.Base;
+                }
+
+                _sourceSkipped = false;
             }
         }
 

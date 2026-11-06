@@ -152,7 +152,7 @@ namespace FpfcAnywhere
 
         private string Status(Camera? game)
         {
-            return $"STATUS phase={_session.Phase} on={_session.FreeCamEnabled} free={_session.ShownPose} game={(game != null ? game.transform.position.ToString("F2") : "none")} head={HeadPose(game)} hands={HandsPose()} menu={_session.MenuOpen} foreignWrites={_foreignWrites} clones={CountClones()} cursor={Cursor.lockState}/{Cursor.visible} focus={Application.isFocused} fps={1f / Mathf.Max(Time.unscaledDeltaTime, 0.0001f):F0}";
+            return $"STATUS phase={_session.Phase} on={_session.FreeCamEnabled} free={_session.ShownPose} game={(game != null ? game.transform.position.ToString("F2") : "none")} head={HeadPose(game)} hands={HandsPose()} menu={_session.MenuOpen} skip={_camera.GameDrawSkipped} foreignWrites={_foreignWrites} clones={CountClones()} cursor={Cursor.lockState}/{Cursor.visible} focus={Application.isFocused} fps={1f / Mathf.Max(Time.unscaledDeltaTime, 0.0001f):F0}";
         }
 
         // Reads the same property MultiplayerLocal(In)activeClient sends to other players.
