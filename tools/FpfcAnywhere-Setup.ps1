@@ -8,8 +8,8 @@ entry to each and copies the mod into Managed. No game binary is changed, and -U
 mod and both entries back out.
 
 .PARAMETER GameDir
-The game folder, or Beat Saber.exe inside it. Defaults to the BSManager instance named 1.45.3,
-and asks where the game is if that folder is not usable.
+The game folder, or Beat Saber.exe inside it. Left out, the script looks through BSManager, Steam
+and Meta by itself, and only asks if it finds no copy of 1.45.3 or more than one.
 
 .PARAMETER DllPath
 The built mod. Defaults to FpfcAnywhere.dll beside this script.
@@ -18,15 +18,23 @@ The built mod. Defaults to FpfcAnywhere.dll beside this script.
 Removes the mod instead of installing it.
 
 .PARAMETER AllowStoreInstall
-Allows installing into a Steam or Meta managed folder. Store updates and file checks can undo or
-break the install, so a BSManager copy is the supported route.
+Does nothing now. Steam and Meta installs are treated like any other, and this stays so older
+instructions keep working.
+
+.PARAMETER SteamRoot
+Where Steam is. Defaults to what Windows says.
+
+.PARAMETER MetaLibraries
+Meta library folders, separated by semicolons. Defaults to what Windows says.
 #>
 [CmdletBinding()]
 param(
     [string]$GameDir,
     [string]$DllPath,
     [switch]$Uninstall,
-    [switch]$AllowStoreInstall
+    [switch]$AllowStoreInstall,
+    [string]$SteamRoot,
+    [string]$MetaLibraries
 )
 
 $ErrorActionPreference = 'Stop'
@@ -138,21 +146,132 @@ function Get-GameProblem([string]$Folder) {
         return $null
     }
 
-    $versionFile = "$Folder\BeatSaberVersion.txt"
-    if (-not [IO.File]::Exists($versionFile)) {
-        return "This needs Beat Saber 1.45.3, but '$Folder' doesn't say what version it is."
-    }
-
-    $version = (Read-Text $versionFile).Trim()
-    if ($version -notmatch '^1\.45\.3(_|$)') {
+    # A copy that doesn't say is let through, because the mod checks the real version when it
+    # starts and switches itself off on anything else. Turning a working game away is worse.
+    $version = Get-GameVersion $Folder
+    if ($version -and $version -notmatch '^1\.45\.3(_|$)') {
         return "This needs Beat Saber 1.45.3, but '$Folder' is $version."
     }
 
-    if (-not $AllowStoreInstall -and $Folder -match '(?i)steamapps|hyperbolic-magnetism-beat-saber') {
-        return "'$Folder' is your Steam or Meta install. Use a BSManager copy instead."
+    return $null
+}
+
+function Get-GameVersion([string]$Folder) {
+    $versionFile = "$Folder\BeatSaberVersion.txt"
+    if ([IO.File]::Exists($versionFile)) {
+        return (Read-Text $versionFile).Trim()
     }
 
     return $null
+}
+
+# Steam and Meta put their own updates over these folders, which only takes the mod's entries back out.
+function Test-StoreFolder([string]$Folder) {
+    return $Folder -match '(?i)steamapps|hyperbolic-magnetism-beat-saber'
+}
+
+function Read-SteamRoot {
+    foreach ($key in @('HKCU:\Software\Valve\Steam', 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam')) {
+        $values = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+        if ($values -and $values.SteamPath) {
+            return $values.SteamPath
+        }
+
+        if ($values -and $values.InstallPath) {
+            return $values.InstallPath
+        }
+    }
+
+    return (Join-Path ${env:ProgramFiles(x86)} 'Steam')
+}
+
+function Read-MetaLibraries {
+    $libraries = @()
+    foreach ($library in @(Get-ChildItem -Path 'HKCU:\Software\Oculus VR, LLC\Oculus\Libraries' -ErrorAction SilentlyContinue)) {
+        $original = (Get-ItemProperty -LiteralPath $library.PSPath -ErrorAction SilentlyContinue).OriginalPath
+        if ($original) {
+            $libraries += $original
+        }
+    }
+
+    $libraries += Join-Path $env:ProgramFiles 'Meta Horizon\Software'
+    $libraries += Join-Path $env:ProgramFiles 'Oculus\Software'
+    return ($libraries -join ';')
+}
+
+# Everything below reads files other programs own, so a damaged one just means nothing found there.
+function Get-BsManagerFolders {
+    $roots = @($env:USERPROFILE)
+    try {
+        $settings = "$env:APPDATA\bs-manager\config.json"
+        if ([IO.File]::Exists($settings)) {
+            $moved = (Read-Text $settings | ConvertFrom-Json).'installation-folder'
+            if ($moved) {
+                $roots = @($moved) + $roots
+            }
+        }
+    }
+    catch {
+    }
+
+    $folders = @()
+    foreach ($root in $roots) {
+        try {
+            $folders += @([IO.Directory]::GetDirectories("$root\BSManager\BSInstances"))
+        }
+        catch {
+        }
+    }
+
+    return $folders
+}
+
+function Get-SteamFolders {
+    $libraries = @()
+    try {
+        foreach ($match in [regex]::Matches((Read-Text "$SteamRoot\steamapps\libraryfolders.vdf"), '"path"\s+"([^"]+)"')) {
+            $libraries += $match.Groups[1].Value.Replace('\\', '\')
+        }
+    }
+    catch {
+    }
+
+    $libraries += $SteamRoot
+    return @($libraries | ForEach-Object { "$_\steamapps\common\Beat Saber" })
+}
+
+function Get-MetaFolders {
+    return @($MetaLibraries -split ';' | Where-Object { $_ } | ForEach-Object { "$($_.TrimEnd('\'))\Software\hyperbolic-magnetism-beat-saber" })
+}
+
+function Find-Copies {
+    $places = @()
+    foreach ($folder in @(Get-BsManagerFolders)) { $places += , @('BSManager', $folder) }
+    foreach ($folder in @(Get-SteamFolders)) { $places += , @('Steam', $folder) }
+    foreach ($folder in @(Get-MetaFolders)) { $places += , @('Meta', $folder) }
+
+    $seen = @{}
+    foreach ($place in $places) {
+        try {
+            $folder = [IO.Path]::GetFullPath($place[1]).TrimEnd('\')
+        }
+        catch {
+            continue
+        }
+
+        $key = $folder.ToLowerInvariant()
+        if ($seen.ContainsKey($key) -or -not [IO.File]::Exists("$folder\Beat Saber.exe")) {
+            continue
+        }
+
+        $seen[$key] = $true
+        New-Object PSObject -Property @{
+            Kind = $place[0]
+            Folder = $folder
+            Problem = (Get-GameProblem $folder)
+            HasMod = [IO.File]::Exists("$folder\Beat Saber_Data\Managed\$AssemblyFile")
+        }
+    }
 }
 
 function Read-GameFolder {
@@ -176,6 +295,41 @@ function Read-GameFolder {
     }
 }
 
+function Read-CopyChoice($Copies) {
+    Write-Host 'Found more than one copy:'
+    for ($index = 0; $index -lt $Copies.Count; $index++) {
+        Write-Host "  $($index + 1). $($Copies[$index].Kind): $($Copies[$index].Folder)"
+    }
+
+    while ($true) {
+        Write-Host 'Type the number of the one you want and press Enter, or drag a different game folder in.'
+        Write-Host 'To quit, just press Enter.'
+
+        $answer = [Console]::In.ReadLine()
+        if ([string]::IsNullOrWhiteSpace($answer)) {
+            return $null
+        }
+
+        $number = 0
+        if ([int]::TryParse($answer.Trim(), [ref]$number)) {
+            if ($number -ge 1 -and $number -le $Copies.Count) {
+                return $Copies[$number - 1].Folder
+            }
+
+            Write-Host "There's no number $number on that list." -ForegroundColor Red
+            continue
+        }
+
+        $folder = ConvertTo-GameFolder $answer
+        $problem = Get-GameProblem $folder
+        if (-not $problem) {
+            return $folder
+        }
+
+        Write-Host $problem -ForegroundColor Red
+    }
+}
+
 function Find-GameFolder {
     if ($GameDir) {
         $folder = ConvertTo-GameFolder $GameDir
@@ -187,14 +341,29 @@ function Find-GameFolder {
         return $folder
     }
 
-    $folder = Join-Path $env:USERPROFILE 'BSManager\BSInstances\1.45.3'
-    $problem = Get-GameProblem $folder
-    if (-not $problem) {
-        return $folder
+    $copies = @(Find-Copies)
+    $usable = @($copies | Where-Object { -not $_.Problem -and (-not $Uninstall -or $_.HasMod) })
+
+    if ($usable.Count -eq 1) {
+        Write-Host "Found Beat Saber in $($usable[0].Folder)"
+        return $usable[0].Folder
     }
 
-    Write-Host $problem
-    $folder = Read-GameFolder
+    if ($usable.Count -gt 1) {
+        $folder = Read-CopyChoice $usable
+    }
+    else {
+        foreach ($copy in $copies) {
+            if ($copy.Problem) {
+                Write-Host $copy.Problem
+            }
+        }
+
+        $wanted = if ($Uninstall) { 'FPFC Anywhere' } else { 'Beat Saber 1.45.3' }
+        Write-Host "Couldn't find $wanted in BSManager, Steam or Meta."
+        $folder = Read-GameFolder
+    }
+
     # Choosing to quit is not an error, so this one stays out of the red.
     if (-not $folder) {
         Write-Host 'Nothing was changed.'
@@ -218,6 +387,14 @@ function Test-GameRunning([string]$Folder) {
 }
 
 try {
+    if (-not $PSBoundParameters.ContainsKey('SteamRoot')) {
+        $SteamRoot = Read-SteamRoot
+    }
+
+    if (-not $PSBoundParameters.ContainsKey('MetaLibraries')) {
+        $MetaLibraries = Read-MetaLibraries
+    }
+
     $GameDir = Find-GameFolder
 
     if (Test-GameRunning $GameDir) {
@@ -284,10 +461,20 @@ try {
     Write-Text $initPath $newInit
 
     Write-Host "FPFC Anywhere installed in $GameDir"
-    Write-Host 'Launch that copy from BSManager with FPFC on.'
+    if (-not (Get-GameVersion $GameDir)) {
+        Write-Host "Couldn't tell which version this copy is. The mod switches itself off on anything but 1.45.3."
+    }
+
+    if (Test-StoreFolder $GameDir) {
+        Write-Host 'A game update will take the mod back out, so just run Install.cmd again after one.'
+        Write-Host 'Launch it from BSManager with FPFC on, or add fpfc to its Steam launch options.'
+    }
+    else {
+        Write-Host 'Launch that copy from BSManager with FPFC on.'
+    }
 }
 catch [System.IO.IOException], [System.UnauthorizedAccessException] {
-    Stop-Setup "Windows wouldn't let this change the game files. Close Beat Saber and anything else using that folder, then run this again." $_.Exception.Message
+    Stop-Setup "Windows wouldn't let this change the game files. Close Beat Saber and anything else using that folder, then run this again. If it still says no, right-click Install.cmd and choose Run as administrator." $_.Exception.Message
 }
 catch {
     Stop-Setup "Setup failed: $($_.Exception.Message)"
