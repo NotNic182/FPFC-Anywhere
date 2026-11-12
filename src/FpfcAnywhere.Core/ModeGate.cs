@@ -14,7 +14,14 @@ namespace FpfcAnywhere.Core
     /// <summary>Decides at startup whether the mod runs at all.</summary>
     public static class ModeGate
     {
-        public const string SupportedVersion = "1.45.3";
+        /// <summary>The newest version the safety checks were repeated on.</summary>
+        public const string SupportedVersion = "1.46.0";
+
+        /// <summary>
+        /// Every version the checks were done on. 1.46.0 left the code this mod reads untouched, so
+        /// one build covers both.
+        /// </summary>
+        public static readonly string[] SupportedVersions = { SupportedVersion, "1.45.3" };
 
         private static readonly string[] FpfcArguments = { "fpfc", "-fpfc" };
 
@@ -30,8 +37,8 @@ namespace FpfcAnywhere.Core
                 return GateDecision.NoFpfcArgument;
             }
 
-            var isSupported = gameVersion == SupportedVersion
-                || gameVersion.StartsWith(SupportedVersion + "_", StringComparison.Ordinal);
+            var isSupported = SupportedVersions.Any(version => gameVersion == version
+                || gameVersion.StartsWith(version + "_", StringComparison.Ordinal));
 
             return isSupported ? GateDecision.Run : GateDecision.UnsupportedVersion;
         }

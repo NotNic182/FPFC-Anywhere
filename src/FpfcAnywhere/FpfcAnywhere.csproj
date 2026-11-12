@@ -3,7 +3,7 @@
     <TargetFramework>net472</TargetFramework>
     <RootNamespace>FpfcAnywhere</RootNamespace>
     <AssemblyName>FpfcAnywhere</AssemblyName>
-    <Version>0.1.9</Version>
+    <Version>0.2.0</Version>
     <DebugType>portable</DebugType>
     <PathMap>$(MSBuildProjectDirectory)=/_</PathMap>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>

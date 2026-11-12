@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Installs or removes FPFC Anywhere in a copy of Beat Saber 1.45.3.
+Installs or removes FPFC Anywhere in a copy of Beat Saber 1.46.0 or 1.45.3.
 
 .DESCRIPTION
 Unity builds list their assemblies and startup methods in two JSON files. This script adds one
@@ -9,7 +9,7 @@ mod and both entries back out.
 
 .PARAMETER GameDir
 The game folder, or Beat Saber.exe inside it. Left out, the script looks through BSManager, Steam
-and Meta by itself, and only asks if it finds no copy of 1.45.3 or more than one.
+and Meta by itself, and only asks if it finds no copy it can use or more than one.
 
 .PARAMETER DllPath
 The built mod. Defaults to FpfcAnywhere.dll beside this script.
@@ -45,6 +45,8 @@ if (-not $DllPath) {
 }
 
 $AssemblyFile = 'FpfcAnywhere.dll'
+$SupportedVersions = @('1.46.0', '1.45.3')
+$SupportedText = $SupportedVersions -join ' or '
 $UserAssemblyType = 16
 $InitEntry = '{"assemblyName":"FpfcAnywhere","nameSpace":"FpfcAnywhere","className":"Bootstrap","methodName":"Init","loadTypes":1,"isUnityClass":false}'
 
@@ -149,14 +151,39 @@ function Get-GameProblem([string]$Folder) {
     # A copy that doesn't say is let through, because the mod checks the real version when it
     # starts and switches itself off on anything else. Turning a working game away is worse.
     $version = Get-GameVersion $Folder
-    if ($version -and $version -notmatch '^1\.45\.3(_|$)') {
-        return "This needs Beat Saber 1.45.3, but '$Folder' is $version."
+    if ($version -and -not (Test-SupportedVersion $version)) {
+        return "This needs Beat Saber $SupportedText, but '$Folder' is $version."
     }
 
     return $null
 }
 
+function Test-SupportedVersion([string]$Version) {
+    foreach ($supported in $SupportedVersions) {
+        if ($Version -eq $supported -or $Version.StartsWith("${supported}_", [StringComparison]::Ordinal)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+# The game keeps its real version in its own data, which every update rewrites. BeatSaberVersion.txt
+# can lag behind: right after the 1.46.0 update it still said 1.45.3. So the data wins, and the text
+# file is only a fallback.
 function Get-GameVersion([string]$Folder) {
+    try {
+        $data = "$Folder\Beat Saber_Data\globalgamemanagers"
+        if ([IO.File]::Exists($data)) {
+            $found = [regex]::Match([Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($data)), '\d+\.\d+\.\d+_\d+')
+            if ($found.Success) {
+                return $found.Value
+            }
+        }
+    }
+    catch {
+    }
+
     $versionFile = "$Folder\BeatSaberVersion.txt"
     if ([IO.File]::Exists($versionFile)) {
         return (Read-Text $versionFile).Trim()
@@ -276,7 +303,7 @@ function Find-Copies {
 
 function Read-GameFolder {
     while ($true) {
-        Write-Host 'Drag your 1.45.3 game folder (the one with Beat Saber.exe in it) into this window and press Enter.'
+        Write-Host "Drag your Beat Saber $SupportedText game folder (the one with Beat Saber.exe in it) into this window and press Enter."
         Write-Host 'To quit, just press Enter.'
 
         # Read-Host fails outright without a console. This returns nothing, which counts as quitting.
@@ -359,7 +386,7 @@ function Find-GameFolder {
             }
         }
 
-        $wanted = if ($Uninstall) { 'FPFC Anywhere' } else { 'Beat Saber 1.45.3' }
+        $wanted = if ($Uninstall) { 'FPFC Anywhere' } else { "Beat Saber $SupportedText" }
         Write-Host "Couldn't find $wanted in BSManager, Steam or Meta."
         $folder = Read-GameFolder
     }
@@ -462,7 +489,7 @@ try {
 
     Write-Host "FPFC Anywhere installed in $GameDir"
     if (-not (Get-GameVersion $GameDir)) {
-        Write-Host "Couldn't tell which version this copy is. The mod switches itself off on anything but 1.45.3."
+        Write-Host "Couldn't tell which version this copy is. The mod switches itself off on anything but $SupportedText."
     }
 
     if (Test-StoreFolder $GameDir) {

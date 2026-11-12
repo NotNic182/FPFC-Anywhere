@@ -1,6 +1,6 @@
 # FPFC Anywhere
 
-Free cam for Beat Saber 1.45.3 on PC. Normally FPFC drops you in the floor and stops working when a song starts. This keeps it working the whole song, including when you're spectating in multiplayer.
+Free cam for Beat Saber 1.46.0 on PC (1.45.3 works too). Normally FPFC drops you in the floor and stops working when a song starts. This keeps it working the whole song, including when you're spectating in multiplayer.
 
 It only changes your desktop view, so nobody else in the lobby needs it. The game's own view isn't drawn while the free cam is on, so fps is about the same as vanilla, and there are settings to push it a lot higher.
 
@@ -9,7 +9,7 @@ It only changes your desktop view, so nobody else in the lobby needs it. The gam
 
 ## Install
 
-Needs Beat Saber 1.45.3. Steam, Meta and BSManager copies all work.
+Needs Beat Saber 1.46.0 or 1.45.3. Steam, Meta and BSManager copies all work.
 
 Grab the zip from releases, unzip it and run `Install.cmd` with the game closed. It finds your game by itself, and if you've got more than one copy it asks which one. Then launch that copy with FPFC on. `Uninstall.cmd` takes it back out.
 
@@ -51,6 +51,6 @@ A little message pops up in the bottom left if a key can't do anything right now
 dotnet build src/FpfcAnywhere -c Release
 ```
 
-It looks for the game two folders up from the repo (I keep it in `<game>/ModSource/FpfcAnywhere`). Otherwise set `BEAT_SABER_DIR` to your game folder.
+It looks for the game two folders up from the repo, or set `BEAT_SABER_DIR` to your game folder.
 
 Not affiliated with Beat Games.

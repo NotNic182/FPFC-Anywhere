@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace FpfcAnywhere.Core
 {
-    /// <summary>Scene names read from 1.45.3 game code and confirmed in a live song.</summary>
+    /// <summary>Scene names read from 1.45.3 game code and confirmed in a live song. 1.46.0 keeps them all.</summary>
     public static class GameplayScenes
     {
         private const string CoreScene = "GameCore";
