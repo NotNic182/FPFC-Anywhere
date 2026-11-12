@@ -9,7 +9,7 @@ namespace FpfcAnywhere
     /// <summary>
     /// A private clone of the game's camera that exists only on this PC.
     ///
-    /// This is the core of the safety design. In 1.45.3 PlayerTransforms reads the game's
+    /// This is the core of the safety design. In 1.45.3 and 1.46.0 PlayerTransforms reads the game's
     /// MainCamera as the player's head, and MultiplayerLocal(In)activeClient sends that value to
     /// other players. So the game's camera is never moved here. The one thing written on it is
     /// the draw type on its URP data, Overlay while the free camera shows so the scene is not

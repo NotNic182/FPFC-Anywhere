@@ -36,7 +36,7 @@ namespace FpfcAnywhere.Core
                 case OperatorNotice.NeedsFpfc:
                     return "FPFC Anywhere is off. Launch with FPFC on.";
                 case OperatorNotice.WrongGameVersion:
-                    return "FPFC Anywhere is off. It only runs on Beat Saber " + ModeGate.SupportedVersion + ".";
+                    return "FPFC Anywhere is off. It only runs on Beat Saber " + string.Join(" or ", ModeGate.SupportedVersions) + ".";
                 case OperatorNotice.SettingsProblem:
                     return "A setting in " + SettingsFile.FileName + " wasn't used. The log says which.";
                 case OperatorNotice.ScoreboardStopped:
