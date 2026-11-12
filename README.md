@@ -33,6 +33,8 @@ Hit Esc while spectating and it takes you to the menu. Aim with the mouse, left 
 
 In multiplayer there's a live scoreboard in the top left with everyone's name and score, plus how far behind first place they are. An F means they failed. Other players never see it, but it'll be on stream if you're capturing the game window.
 
+If it's in the way of your webcam or an overlay, `scoreboard_corner` in the settings file moves it to another corner and `scoreboard_scale` makes it bigger or smaller.
+
 ## Settings
 
 The first launch makes `UserData/FpfcAnywhere.ini` in your game folder. Open it in Notepad to change the look speed, fly speed, Shift speed, field of view, camera smoothing, the scoreboard, the render scale, anti-aliasing and fps cap the free cam runs at, and whether the game's own view still gets drawn. Changes kick in at the next song.

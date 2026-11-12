@@ -6,6 +6,15 @@ using System.Text;
 
 namespace FpfcAnywhere.Core
 {
+    /// <summary>A corner of the game window. The order matches the words in the settings file.</summary>
+    public enum ScreenCorner
+    {
+        TopLeft,
+        TopRight,
+        BottomLeft,
+        BottomRight,
+    }
+
     /// <summary>One player, as the game ranks them.</summary>
     public readonly struct PlayerScore : IEquatable<PlayerScore>
     {
@@ -73,9 +82,14 @@ namespace FpfcAnywhere.Core
 
         public const int MaxNameLength = 22;
 
-        private const string CutMark = "...";
+        // One ellipsis character: tighter than three periods, so a cut name keeps two more letters.
+        private const string CutMark = "\u2026";
         private const string FailedText = "F";
         private const string NoName = "?";
+
+        // Real languages put up to about three marks on one letter. Glitch text stacks dozens, which
+        // would draw over the rows above and below.
+        private const int MostMarksPerLetter = 3;
 
         private static readonly NumberFormatInfo GameNumbers = new NumberFormatInfo { NumberGroupSeparator = " " };
 
@@ -104,6 +118,9 @@ namespace FpfcAnywhere.Core
         // The same format as the game's own score displays.
         private static string Number(int value) => value.ToString("#,0", GameNumbers);
 
+        // Names arrive from other players. What the game's font can't draw would show as a box on
+        // stream, and invisible characters could make a name look empty, so both are left out. Any
+        // kind of space or line break becomes one plain space.
         private static string CleanName(string? name)
         {
             if (name == null)
@@ -112,12 +129,59 @@ namespace FpfcAnywhere.Core
             }
 
             var oneLine = new StringBuilder(name.Length);
-            foreach (var character in name)
+            var marks = 0;
+            var spaceWaiting = false;
+            for (var index = 0; index < name.Length; index++)
             {
-                oneLine.Append(char.IsControl(character) ? ' ' : character);
+                var length = 1;
+                if (char.IsHighSurrogate(name[index]) && index + 1 < name.Length && char.IsLowSurrogate(name[index + 1]))
+                {
+                    length = 2;
+                }
+                else if (char.IsSurrogate(name[index]))
+                {
+                    continue;
+                }
+
+                var codePoint = char.ConvertToUtf32(name, index);
+                var category = CharUnicodeInfo.GetUnicodeCategory(name, index);
+                var piece = name.Substring(index, length);
+                index += length - 1;
+
+                if (char.IsControl(piece, 0) || char.IsWhiteSpace(piece, 0))
+                {
+                    spaceWaiting = oneLine.Length > 0;
+                    continue;
+                }
+
+                if (IsEmojiPart(codePoint) || category == UnicodeCategory.Format)
+                {
+                    continue;
+                }
+
+                if (category == UnicodeCategory.NonSpacingMark || category == UnicodeCategory.EnclosingMark)
+                {
+                    // A mark needs a letter right before it to sit on.
+                    if (oneLine.Length > 0 && !spaceWaiting && marks < MostMarksPerLetter)
+                    {
+                        oneLine.Append(piece);
+                        marks++;
+                    }
+
+                    continue;
+                }
+
+                if (spaceWaiting)
+                {
+                    oneLine.Append(' ');
+                    spaceWaiting = false;
+                }
+
+                oneLine.Append(piece);
+                marks = 0;
             }
 
-            var clean = oneLine.ToString().Trim();
+            var clean = oneLine.ToString();
             if (clean.Length == 0)
             {
                 return NoName;
@@ -136,6 +200,12 @@ namespace FpfcAnywhere.Core
 
             return clean.Substring(0, keep) + CutMark;
         }
+
+        // Pictographs the game's font has no shapes for, and the selectors and keycaps that build emoji.
+        private static bool IsEmojiPart(int codePoint) =>
+            (codePoint >= 0x1F000 && codePoint <= 0x1FAFF)
+            || (codePoint >= 0xFE00 && codePoint <= 0xFE0F)
+            || codePoint == 0x20E3;
     }
 
     /// <summary>
@@ -235,10 +305,41 @@ namespace FpfcAnywhere.Core
 
         private const float WindowHeightsPerFont = 48f;
 
-        public static int FontSize(int screenHeight)
+        public static int FontSize(int screenHeight) => FontSize(screenHeight, 1f);
+
+        /// <summary>The size setting can shrink the board, but never below what still reads on a stream.</summary>
+        public static int FontSize(int screenHeight, float scale)
         {
-            var size = (int)Math.Round(screenHeight / WindowHeightsPerFont);
+            var size = (int)Math.Round(screenHeight / WindowHeightsPerFont * scale);
             return Math.Min(Math.Max(size, SmallestFont), LargestFont);
+        }
+
+        /// <summary>
+        /// The text a column is sized from. Digits are all one width, so the standard sample keeps the
+        /// board still as scores climb, and anything longer takes over so no digit gets clipped off.
+        /// </summary>
+        public static string Sample(string standard, IEnumerable<string> texts)
+        {
+            var widest = standard;
+            foreach (var text in texts)
+            {
+                if (text != null && text.Length > widest.Length)
+                {
+                    widest = text;
+                }
+            }
+
+            return widest;
+        }
+
+        /// <summary>Where the board's top left goes so it sits in its corner, inside the broadcast margin.</summary>
+        public static (float Left, float Top) PlateOrigin(ScreenCorner corner, int screenWidth, int screenHeight, float plateWidth, float plateHeight, float margin)
+        {
+            var right = corner == ScreenCorner.TopRight || corner == ScreenCorner.BottomRight;
+            var bottom = corner == ScreenCorner.BottomLeft || corner == ScreenCorner.BottomRight;
+            var left = right ? Math.Max(screenWidth - margin - plateWidth, 0f) : margin;
+            var top = bottom ? Math.Max(screenHeight - margin - plateHeight, 0f) : margin;
+            return (left, top);
         }
 
         public static float RowHeight(int fontSize) => fontSize * 1.5f;
@@ -246,9 +347,13 @@ namespace FpfcAnywhere.Core
         public static float ColumnGap(int fontSize) => fontSize * 0.8f;
 
         /// <summary>The name column gives way before the board runs off the window.</summary>
-        public static float NameWidth(float wanted, int screenWidth, int fontSize, float otherColumns)
+        public static float NameWidth(float wanted, int screenWidth, int fontSize, float otherColumns) =>
+            NameWidth(wanted, screenWidth, fontSize, otherColumns, NoticeLayout.Margin(fontSize));
+
+        /// <summary>The same, with the margin the board really sits at, which comes from the window.</summary>
+        public static float NameWidth(float wanted, int screenWidth, int fontSize, float otherColumns, float margin)
         {
-            var room = screenWidth - (NoticeLayout.Margin(fontSize) * 2f) - otherColumns;
+            var room = screenWidth - (margin * 2f) - otherColumns;
             return Math.Max(Math.Min(wanted, room), fontSize);
         }
     }

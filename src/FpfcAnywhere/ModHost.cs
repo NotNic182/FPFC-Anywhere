@@ -126,6 +126,9 @@ namespace FpfcAnywhere
                 return;
             }
 
+            _scoreboard.Place(_settings.ScoreboardCorner, _settings.ScoreboardScale);
+            _notices.AvoidBoard(_settings.ScoreboardCorner);
+
             ModLog.Info("Settings " + SettingsText.Describe(_settings));
             foreach (var problem in _settingsFile.Problems)
             {

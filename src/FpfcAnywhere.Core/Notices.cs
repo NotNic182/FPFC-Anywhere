@@ -126,6 +126,13 @@ namespace FpfcAnywhere.Core
 
         public static float Padding(int fontSize) => fontSize * 0.6f;
 
+        /// <summary>Notices keep to the bottom, and step right while the scoreboard has the bottom left.</summary>
+        public static ScreenCorner Corner(ScreenCorner board) =>
+            board == ScreenCorner.BottomLeft ? ScreenCorner.BottomRight : ScreenCorner.BottomLeft;
+
+        public static float PlateLeft(ScreenCorner corner, int screenWidth, float plateWidth, float margin) =>
+            corner == ScreenCorner.TopRight || corner == ScreenCorner.BottomRight ? Math.Max(screenWidth - margin - plateWidth, 0f) : margin;
+
         /// <summary>Text wider than this wraps. A tiny window still gets a usable width.</summary>
         public static float MaxTextWidth(int screenWidth, int fontSize)
         {

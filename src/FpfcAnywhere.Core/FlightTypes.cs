@@ -48,6 +48,12 @@ namespace FpfcAnywhere.Core
         /// <summary>Whether the live scores get pinned to the window during multiplayer.</summary>
         public bool ShowScoreboard { get; set; } = true;
 
+        /// <summary>Which corner of the window the scoreboard sits in.</summary>
+        public ScreenCorner ScoreboardCorner { get; set; } = ScreenCorner.TopLeft;
+
+        /// <summary>How big the scoreboard is next to the size the window gives it. 1 is normal.</summary>
+        public float ScoreboardScale { get; set; } = 1f;
+
         /// <summary>How far the player must jump in one frame to count as a spot change, not a head movement.</summary>
         public float SpotJumpMeters { get; set; } = 0.5f;
 

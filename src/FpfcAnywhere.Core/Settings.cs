@@ -19,6 +19,8 @@ namespace FpfcAnywhere.Core
             Setting.Between("fov", 20f, 120f, settings => settings.FieldOfView, (settings, value) => settings.FieldOfView = value),
             Setting.Between("smoothing", 0f, 1f, settings => settings.SmoothingSeconds, (settings, value) => settings.SmoothingSeconds = value),
             Setting.Between("scoreboard", 0f, 1f, settings => settings.ShowScoreboard ? 1f : 0f, (settings, value) => settings.ShowScoreboard = value > 0f),
+            Setting.Word("scoreboard_corner", new[] { "top_left", "top_right", "bottom_left", "bottom_right" }, settings => (float)settings.ScoreboardCorner, (settings, value) => settings.ScoreboardCorner = (ScreenCorner)(int)value),
+            Setting.Between("scoreboard_scale", 0.5f, 2f, settings => settings.ScoreboardScale, (settings, value) => settings.ScoreboardScale = value),
             Setting.OffOrBetween("render_scale", 0.5f, 2f, settings => settings.RenderScale, (settings, value) => settings.RenderScale = value),
             Setting.OneOf("anti_aliasing", new[] { 0f, 1f, 2f, 4f, 8f }, settings => settings.AntiAliasing, (settings, value) => settings.AntiAliasing = (int)value),
             Setting.OffOrBetween("fps_cap", 20f, 1000f, settings => settings.FpsCap, (settings, value) => settings.FpsCap = (int)Math.Round(value)),
@@ -47,8 +49,15 @@ namespace FpfcAnywhere.Core
             "# it takes to catch up with you. Higher is floatier. 0 is off. 0 to 1.",
             "smoothing = 0.5",
             string.Empty,
-            "# Pins the live scores to the top left during multiplayer. 1 is on, 0 is off.",
+            "# Pins the live scores to a corner during multiplayer. 1 is on, 0 is off.",
             "scoreboard = 1",
+            string.Empty,
+            "# Which corner the scoreboard sits in: top_left, top_right, bottom_left or bottom_right.",
+            "# Notices move to the bottom right while it's in the bottom left.",
+            "scoreboard_corner = top_left",
+            string.Empty,
+            "# How big the scoreboard is. 1 is normal. 0.5 to 2.",
+            "scoreboard_scale = 1",
             string.Empty,
             "# Draws the game at this fraction of the window size while the free cam is on. 1 is the",
             "# window's own size, and a big fps win if your VR resolution scale is higher. 0 keeps the",
@@ -100,7 +109,7 @@ namespace FpfcAnywhere.Core
             var parts = new List<string>();
             foreach (var setting in Settings)
             {
-                parts.Add(setting.Name + "=" + Format(setting.Read(settings)));
+                parts.Add(setting.Name + "=" + setting.Show(setting.Read(settings)));
             }
 
             return string.Join(" ", parts);
@@ -125,6 +134,21 @@ namespace FpfcAnywhere.Core
             if (setting == null)
             {
                 return $"there's no setting called \"{name}\"";
+            }
+
+            // Spaces and dashes count as underscores, since "top right" is what most people type.
+            if (setting.Words != null)
+            {
+                var wanted = value.Replace(' ', '_').Replace('-', '_');
+                var index = Array.FindIndex(setting.Words, word => string.Equals(word, wanted, StringComparison.OrdinalIgnoreCase));
+                if (index < 0)
+                {
+                    setting.Write(settings, setting.Read(defaults));
+                    return $"{setting.Name} has to be {setting.Allowed}, so it's using {setting.Show(setting.Read(defaults))}";
+                }
+
+                setting.Write(settings, index);
+                return null;
             }
 
             if (!TryNumber(value, out var number))
@@ -160,13 +184,14 @@ namespace FpfcAnywhere.Core
 
         private sealed class Setting
         {
-            private Setting(string name, string allowed, Func<float, float> fix, Func<FlightSettings, float> read, Action<FlightSettings, float> write)
+            private Setting(string name, string allowed, Func<float, float> fix, Func<FlightSettings, float> read, Action<FlightSettings, float> write, string[]? words = null)
             {
                 Name = name;
                 Allowed = allowed;
                 Fix = fix;
                 Read = read;
                 Write = write;
+                Words = words;
             }
 
             public string Name { get; }
@@ -181,6 +206,12 @@ namespace FpfcAnywhere.Core
 
             public Action<FlightSettings, float> Write { get; }
 
+            /// <summary>For a setting written as a word, the words in order. Each one's place is its value.</summary>
+            public string[]? Words { get; }
+
+            /// <summary>The value as a person would write it in the file.</summary>
+            public string Show(float value) => Words != null ? Words[Math.Min(Math.Max((int)value, 0), Words.Length - 1)] : Format(value);
+
             public static Setting Between(string name, float min, float max, Func<FlightSettings, float> read, Action<FlightSettings, float> write)
             {
                 return new Setting(name, $"between {Format(min)} and {Format(max)}", value => Math.Min(Math.Max(value, min), max), read, write);
@@ -192,12 +223,16 @@ namespace FpfcAnywhere.Core
                 return new Setting(name, $"0 or between {Format(min)} and {Format(max)}", value => value <= 0f ? 0f : Math.Min(Math.Max(value, min), max), read, write);
             }
 
+            /// <summary>One of a few words, like a corner.</summary>
+            public static Setting Word(string name, string[] words, Func<FlightSettings, float> read, Action<FlightSettings, float> write)
+            {
+                return new Setting(name, Listing(words), value => value, read, write, words);
+            }
+
             /// <summary>Only the listed values, in rising order. Anything else uses the nearest one, the higher on a tie.</summary>
             public static Setting OneOf(string name, float[] values, Func<FlightSettings, float> read, Action<FlightSettings, float> write)
             {
-                var words = string.Join(", ", Array.ConvertAll(values, Format));
-                var last = words.LastIndexOf(", ", StringComparison.Ordinal);
-                var allowed = words.Substring(0, last) + " or " + words.Substring(last + 2);
+                var allowed = Listing(Array.ConvertAll(values, Format));
 
                 return new Setting(name, allowed, value =>
                 {
@@ -212,6 +247,13 @@ namespace FpfcAnywhere.Core
 
                     return nearest;
                 }, read, write);
+            }
+
+            private static string Listing(string[] items)
+            {
+                var words = string.Join(", ", items);
+                var last = words.LastIndexOf(", ", StringComparison.Ordinal);
+                return words.Substring(0, last) + " or " + words.Substring(last + 2);
             }
         }
     }
