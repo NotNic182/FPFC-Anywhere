@@ -6,7 +6,7 @@ using UnityEngine;
 namespace FpfcAnywhere
 {
     /// <summary>
-    /// Pins the live scores to the top left of the desktop window. IMGUI only reaches this PC's
+    /// Pins the live scores to a corner of the desktop window. IMGUI only reaches this PC's
     /// window, so the headset and the lobby never see it, though a stream capturing the window will.
     ///
     /// ModHost leaves it disabled outside a multiplayer song, so other frames pay nothing. It is
@@ -15,9 +15,6 @@ namespace FpfcAnywhere
     /// </summary>
     internal sealed class ScoreboardOverlay : MonoBehaviour
     {
-        // Same as the notices, which keeps white text above 7:1 even over a pure white scene.
-        private const float PlateAlpha = 0.75f;
-
         private const float LeaderStripeWidth = 0.18f;
 
         // Digits are all the same width, so sizing the columns from these stops the board
@@ -25,11 +22,10 @@ namespace FpfcAnywhere
         private const string WidestScore = "8 888 888";
         private const string WidestGap = "-888 888";
 
-        private static readonly Color Plate = new Color(0f, 0f, 0f, PlateAlpha);
-        private static readonly Color Leader = new Color(1f, 0.82f, 0.3f);
         private static readonly Color Normal = Color.white;
-        private static readonly Color Dimmed = new Color(1f, 1f, 1f, 0.7f);
-        private static readonly Color Out = new Color(1f, 1f, 1f, 0.5f);
+        private static readonly Color Plate = new Color(0f, 0f, 0f, OverlayLook.PlateOpacity);
+        private static readonly Color Dimmed = new Color(1f, 1f, 1f, OverlayLook.GapOpacity);
+        private static readonly Color Out = new Color(1f, 1f, 1f, OverlayLook.OutOpacity);
 
         private readonly ScoreboardFeed _feed = new ScoreboardFeed(new UnityScoreSource());
         private readonly Line[] _lines = Enumerable.Range(0, ScoreboardRows.MaxRows).Select(_ => new Line()).ToArray();
@@ -42,13 +38,39 @@ namespace FpfcAnywhere
         private int _lineCount;
         private int _fontSize;
         private int _windowWidth;
+        private int _windowHeight;
+        private int _scoreColumnChars;
+        private int _gapColumnChars;
         private bool _laidOut;
+        private ScreenCorner _corner = ScreenCorner.TopLeft;
+        private float _scale = 1f;
+        private Color _leader;
+
+        /// <summary>Takes the corner and size from the settings. They apply from the next frame drawn.</summary>
+        public void Place(ScreenCorner corner, float scale)
+        {
+            if (corner == _corner && scale == _scale)
+            {
+                return;
+            }
+
+            _corner = corner;
+            _scale = scale;
+            _laidOut = false;
+        }
 
         private void Awake()
         {
             useGUILayout = false;
             enabled = false;
             _notices = GetComponent<NoticeOverlay>();
+
+            // Unity would draw this gold as orange in a linear colour project, so it's handed over corrected.
+            var linear = QualitySettings.activeColorSpace == ColorSpace.Linear;
+            _leader = new Color(
+                OverlayLook.ForGui(OverlayLook.LeaderRed, linear),
+                OverlayLook.ForGui(OverlayLook.LeaderGreen, linear),
+                OverlayLook.ForGui(OverlayLook.LeaderBlue, linear));
         }
 
         private void OnEnable() => ModLog.Info("Scoreboard on");
@@ -110,7 +132,13 @@ namespace FpfcAnywhere
                 line.Rank.text = row.Rank;
                 line.Score.text = row.Score;
                 line.Gap.text = row.Gap;
-                line.RankColor = row.IsFailed ? Out : row.IsLeader ? Leader : Normal;
+
+                // A number longer than its column would lose its first digits, so the column grows.
+                if (row.Score.Length > _scoreColumnChars || row.Gap.Length > _gapColumnChars)
+                {
+                    _laidOut = false;
+                }
+                line.RankColor = row.IsFailed ? Out : row.IsLeader ? _leader : Normal;
                 line.TextColor = row.IsFailed ? Out : Normal;
             }
 
@@ -138,8 +166,8 @@ namespace FpfcAnywhere
         // already has been. The text only changes a few times a second.
         private void Draw()
         {
-            var fontSize = ScoreboardLayout.FontSize(Screen.height);
-            if (!_laidOut || fontSize != _fontSize || Screen.width != _windowWidth)
+            var fontSize = ScoreboardLayout.FontSize(Screen.height, _scale);
+            if (!_laidOut || fontSize != _fontSize || Screen.width != _windowWidth || Screen.height != _windowHeight)
             {
                 LayOut(fontSize);
             }
@@ -150,7 +178,7 @@ namespace FpfcAnywhere
 
             if (_lines[0].IsLeader)
             {
-                GUI.color = Leader;
+                GUI.color = _leader;
                 GUI.DrawTexture(_leaderStripe, Texture2D.whiteTexture);
             }
 
@@ -184,6 +212,7 @@ namespace FpfcAnywhere
 
             _fontSize = fontSize;
             _windowWidth = Screen.width;
+            _windowHeight = Screen.height;
             _laidOut = true;
 
             var padding = NoticeLayout.Padding(fontSize);
@@ -191,26 +220,34 @@ namespace FpfcAnywhere
             var rowHeight = ScoreboardLayout.RowHeight(fontSize);
 
             var rankWidth = WidthOf(_lines[_lineCount - 1].Rank.text, _numberStyle!);
-            var scoreWidth = WidthOf(WidestScore, _numberStyle!);
-            var gapWidth = WidthOf(WidestGap, _numberStyle!);
+            var scoreSample = ScoreboardLayout.Sample(WidestScore, _lines.Take(_lineCount).Select(line => line.Score.text));
+            var gapSample = ScoreboardLayout.Sample(WidestGap, _lines.Take(_lineCount).Select(line => line.Gap.text));
+            _scoreColumnChars = scoreSample.Length;
+            _gapColumnChars = gapSample.Length;
+            var scoreWidth = WidthOf(scoreSample, _numberStyle!);
+            var gapWidth = WidthOf(gapSample, _numberStyle!);
             var widestName = _lines.Take(_lineCount).Max(line => _nameStyle!.CalcSize(line.Name).x);
 
+            // The margin comes from the window, not the board, so a bigger board doesn't creep inwards.
+            var margin = NoticeLayout.Margin(ScoreboardLayout.FontSize(_windowHeight));
             var otherColumns = (padding * 2f) + rankWidth + scoreWidth + gapWidth + (columnGap * 3f);
-            var nameWidth = ScoreboardLayout.NameWidth(widestName, _windowWidth, fontSize, otherColumns);
+            var nameWidth = ScoreboardLayout.NameWidth(widestName, _windowWidth, fontSize, otherColumns, margin);
+            var plateWidth = otherColumns + nameWidth;
+            var plateHeight = (rowHeight * _lineCount) + (padding * 2f);
+            var origin = ScoreboardLayout.PlateOrigin(_corner, _windowWidth, _windowHeight, plateWidth, plateHeight, margin);
+            _plate = new Rect(origin.Left, origin.Top, plateWidth, plateHeight);
+            _leaderStripe = new Rect(origin.Left, origin.Top + padding, fontSize * LeaderStripeWidth, rowHeight);
 
-            var margin = NoticeLayout.Margin(fontSize);
-            _plate = new Rect(margin, margin, otherColumns + nameWidth, (rowHeight * _lineCount) + (padding * 2f));
-            _leaderStripe = new Rect(margin, margin + padding, fontSize * LeaderStripeWidth, rowHeight);
-
-            var nameLeft = margin + padding + rankWidth + columnGap;
+            var rankLeft = origin.Left + padding;
+            var nameLeft = rankLeft + rankWidth + columnGap;
             var scoreLeft = nameLeft + nameWidth + columnGap;
             var gapLeft = scoreLeft + scoreWidth + columnGap;
 
             for (var index = 0; index < _lineCount; index++)
             {
-                var top = margin + padding + (rowHeight * index);
+                var top = origin.Top + padding + (rowHeight * index);
                 var line = _lines[index];
-                line.RankArea = new Rect(margin + padding, top, rankWidth, rowHeight);
+                line.RankArea = new Rect(rankLeft, top, rankWidth, rowHeight);
                 line.NameArea = new Rect(nameLeft, top, nameWidth, rowHeight);
                 line.ScoreArea = new Rect(scoreLeft, top, scoreWidth, rowHeight);
                 line.GapArea = new Rect(gapLeft, top, gapWidth, rowHeight);
@@ -225,9 +262,8 @@ namespace FpfcAnywhere
 
         private void BuildStyles(int fontSize)
         {
-            var fonts = Resources.FindObjectsOfTypeAll<Font>();
-            _nameStyle = StyleFor(fonts.FirstOrDefault(font => font.name == "Roboto-Regular"), fontSize, TextAnchor.MiddleLeft);
-            _numberStyle = StyleFor(fonts.FirstOrDefault(font => font.name == "Roboto-Bold"), fontSize, TextAnchor.MiddleRight);
+            _nameStyle = StyleFor(GameFonts.Text, fontSize, TextAnchor.MiddleLeft);
+            _numberStyle = StyleFor(GameFonts.Figures, fontSize, TextAnchor.MiddleRight);
         }
 
         // Rich text stays off because the names come from other players, and a name like

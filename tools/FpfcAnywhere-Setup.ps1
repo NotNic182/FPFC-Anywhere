@@ -140,7 +140,7 @@ function Get-GameProblem([string]$Folder) {
 
     foreach ($name in @('ScriptingAssemblies.json', 'RuntimeInitializeOnLoads.json')) {
         if (-not [IO.File]::Exists("$Folder\Beat Saber_Data\$name")) {
-            return "'$Folder' is missing $name, so it isn't a full copy of the game. Download it again in BSManager."
+            return "'$Folder' is missing $name, so it isn't a full copy of the game. $(Get-RepairAdvice $Folder)"
         }
     }
 
@@ -192,9 +192,51 @@ function Get-GameVersion([string]$Folder) {
     return $null
 }
 
+# Where a copy came from decides how it starts with FPFC and how a broken one gets fixed.
+function Get-CopyKind([string]$Folder) {
+    if ($Folder -match '(?i)\\BSManager\\BSInstances\\') {
+        return 'BSManager'
+    }
+
+    if ($Folder -match '(?i)\\steamapps\\') {
+        return 'Steam'
+    }
+
+    if ($Folder -match '(?i)hyperbolic-magnetism-beat-saber') {
+        return 'Meta'
+    }
+
+    return 'Other'
+}
+
 # Steam and Meta put their own updates over these folders, which only takes the mod's entries back out.
 function Test-StoreFolder([string]$Folder) {
-    return $Folder -match '(?i)steamapps|hyperbolic-magnetism-beat-saber'
+    return (Get-CopyKind $Folder) -in @('Steam', 'Meta')
+}
+
+function Get-RepairAdvice([string]$Folder) {
+    switch (Get-CopyKind $Folder) {
+        'BSManager' { return 'Download it again in BSManager.' }
+        'Steam' { return 'In Steam, right-click Beat Saber, pick Properties, then Installed Files, then Verify integrity of game files.' }
+        'Meta' { return 'Repair or reinstall it in the Meta app.' }
+        default { return 'Copy the game folder again from a working install.' }
+    }
+}
+
+# Meta has no launch options box, so those copies, and any loose copy, get the exact line to run.
+function Write-LaunchSteps([string]$Folder) {
+    switch (Get-CopyKind $Folder) {
+        'BSManager' {
+            Write-Host 'Launch that copy from BSManager with FPFC on.'
+        }
+        'Steam' {
+            Write-Host 'To start it with FPFC on, right-click Beat Saber in Steam, pick Properties and type fpfc under Launch Options.'
+        }
+        default {
+            Write-Host 'To start it with FPFC on, copy the line below, press Windows+R, paste it and press Enter.'
+            Write-Host "`"$Folder\Beat Saber.exe`" fpfc"
+        }
+    }
 }
 
 function Read-SteamRoot {
@@ -455,7 +497,7 @@ try {
         $null = $newInit | ConvertFrom-Json
     }
     catch {
-        Stop-Setup "The game's file lists in '$GameDir' look damaged, so nothing was changed. Download that copy again in BSManager."
+        Stop-Setup "The game's file lists in '$GameDir' look damaged, so nothing was changed. $(Get-RepairAdvice $GameDir)"
     }
 
     if ($Uninstall) {
@@ -492,12 +534,9 @@ try {
         Write-Host "Couldn't tell which version this copy is. The mod switches itself off on anything but $SupportedText."
     }
 
+    Write-LaunchSteps $GameDir
     if (Test-StoreFolder $GameDir) {
-        Write-Host 'A game update will take the mod back out, so just run Install.cmd again after one.'
-        Write-Host 'Launch it from BSManager with FPFC on, or add fpfc to its Steam launch options.'
-    }
-    else {
-        Write-Host 'Launch that copy from BSManager with FPFC on.'
+        Write-Host 'A game update takes the mod back out, so just run Install.cmd again after one.'
     }
 }
 catch [System.IO.IOException], [System.UnauthorizedAccessException] {
