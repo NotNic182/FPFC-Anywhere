@@ -4,7 +4,7 @@ Builds the mod and packs everything a moderator needs into release\FpfcAnywhere-
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '0.2.1'
+    [string]$Version = '0.2.2'
 )
 
 $ErrorActionPreference = 'Stop'

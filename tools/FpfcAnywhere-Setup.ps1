@@ -334,9 +334,13 @@ function Find-Copies {
         }
 
         $seen[$key] = $true
+        $version = Get-GameVersion $folder
         New-Object PSObject -Property @{
             Kind = $place[0]
+            Name = Split-Path $folder -Leaf
             Folder = $folder
+            Version = $version
+            OtherVersion = [bool]($version -and -not (Test-SupportedVersion $version))
             Problem = (Get-GameProblem $folder)
             HasMod = [IO.File]::Exists("$folder\Beat Saber_Data\Managed\$AssemblyFile")
         }
@@ -364,10 +368,30 @@ function Read-GameFolder {
     }
 }
 
+# 1.46.0_34060 reads as 1.46.0, the way people talk about it.
+function Get-ShortVersion([string]$Version) {
+    return ($Version -split '_')[0]
+}
+
+# BSManager copies go by the name they were given, since that's how a person tells them apart.
+function Get-CopyLabel($Copy) {
+    $label = if ($Copy.Kind -eq 'BSManager') { "BSManager `"$($Copy.Name)`"" } else { $Copy.Kind }
+    if ($Copy.Version) {
+        $label += ", $(Get-ShortVersion $Copy.Version)"
+    }
+
+    if ($Copy.HasMod -and -not $Uninstall) {
+        $label += ', already has the mod'
+    }
+
+    return $label
+}
+
 function Read-CopyChoice($Copies) {
     Write-Host 'Found more than one copy:'
     for ($index = 0; $index -lt $Copies.Count; $index++) {
-        Write-Host "  $($index + 1). $($Copies[$index].Kind): $($Copies[$index].Folder)"
+        Write-Host "  $($index + 1). $(Get-CopyLabel $Copies[$index])"
+        Write-Host "     $($Copies[$index].Folder)"
     }
 
     while ($true) {
@@ -413,8 +437,20 @@ function Find-GameFolder {
     $copies = @(Find-Copies)
     $usable = @($copies | Where-Object { -not $_.Problem -and (-not $Uninstall -or $_.HasMod) })
 
+    # Copies on other versions are named in one line, so nobody wonders where theirs went.
+    $otherVersions = @($copies | Where-Object { $_.OtherVersion } | ForEach-Object { Get-ShortVersion $_.Version } | Sort-Object -Unique)
+    if ($otherVersions.Count -gt 0) {
+        Write-Host "Left out copies on $($otherVersions -join ', '). This needs Beat Saber $SupportedText."
+    }
+
+    foreach ($copy in $copies) {
+        if ($copy.Problem -and -not $copy.OtherVersion) {
+            Write-Host $copy.Problem
+        }
+    }
+
     if ($usable.Count -eq 1) {
-        Write-Host "Found Beat Saber in $($usable[0].Folder)"
+        Write-Host "Found $(Get-CopyLabel $usable[0]) in $($usable[0].Folder)"
         return $usable[0].Folder
     }
 
@@ -422,12 +458,6 @@ function Find-GameFolder {
         $folder = Read-CopyChoice $usable
     }
     else {
-        foreach ($copy in $copies) {
-            if ($copy.Problem) {
-                Write-Host $copy.Problem
-            }
-        }
-
         $wanted = if ($Uninstall) { 'FPFC Anywhere' } else { "Beat Saber $SupportedText" }
         Write-Host "Couldn't find $wanted in BSManager, Steam or Meta."
         $folder = Read-GameFolder
@@ -466,8 +496,12 @@ try {
 
     $GameDir = Find-GameFolder
 
-    if (Test-GameRunning $GameDir) {
-        Stop-Setup 'Close Beat Saber first, then run this again.'
+    # Closing the game and pressing Enter carries on, so a game left open doesn't mean starting over.
+    while (Test-GameRunning $GameDir) {
+        Write-Host 'Beat Saber is open. Close it, then press Enter here to carry on.'
+        if ($null -eq [Console]::In.ReadLine()) {
+            Stop-Setup 'Close Beat Saber first, then run this again.'
+        }
     }
 
     if (-not $Uninstall -and -not (Test-Path -LiteralPath $DllPath)) {
