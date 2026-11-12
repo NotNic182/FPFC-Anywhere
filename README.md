@@ -11,7 +11,7 @@ It only changes your desktop view, so nobody else in the lobby needs it. The gam
 
 Needs Beat Saber 1.46.0 or 1.45.3. Steam, Meta and BSManager copies all work.
 
-Grab the zip from releases, unzip it and run `Install.cmd` with the game closed. It finds your game by itself, and if you've got more than one copy it asks which one. Then launch that copy with FPFC on. `Uninstall.cmd` takes it back out.
+Grab the zip from releases, right-click it and pick Extract All, then run `Install.cmd` from the new folder. It finds your game by itself. If you've got more than one copy it lists them by name and version, so renamed BSManager copies are easy to spot, and you type the number of the one you want. Then launch that copy with FPFC on, it tells you how. `Uninstall.cmd` takes it back out.
 
 A game update takes the mod back out, so just run `Install.cmd` again after one.
 
